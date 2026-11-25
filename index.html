@@ -37,11 +37,14 @@
   <aside id="picker" class="panel lobby-only">
     <h2>Pick a game</h2>
     <div id="games" class="games"></div>
+    <div id="maps" class="maps hidden"></div>
     <div class="match-row">
       <span id="round-info"></span>
-      <label>Rounds
+      <label>Match
         <select id="rounds">
-          <option>1</option><option>3</option><option>5</option><option>7</option><option>10</option>
+          <option value="r1">1 round</option><option value="r3">3 rounds</option><option value="r5">5 rounds</option>
+          <option value="r7">7 rounds</option><option value="r10">10 rounds</option>
+          <option value="w3">First to 3 wins</option><option value="w5">First to 5 wins</option>
         </select>
       </label>
     </div>

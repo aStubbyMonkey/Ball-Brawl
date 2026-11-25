@@ -16,7 +16,7 @@ export default {
   theme: 'candy',
   tagline: 'The floor is crumbling. Be the last ball standing!',
   howTo: 'Tilt to roll. The floor falls away from the edges. Flashing tiles are about to drop. Last one on wins!',
-  actionLabel: 'BOOST!',
+  actionLabel: null,
   minPlayers: 1,
 
   create(ctx) {
@@ -89,7 +89,7 @@ export default {
       ctx.audio.splash();
       ctx.engine.addShake(0.25);
       p.ball.deactivate();
-      ctx.buzz(p, 400);
+      ctx.feel(p, 'out');
       ctx.tell(p, "You're out!", 'Cheer on the others! 📣');
       const left = ctx.players.filter((o) => !o.ball.data.out).length;
       ctx.announce(`${p.name} is out!`, left > 1 ? `${left} balls left` : null, 1400);
@@ -108,15 +108,10 @@ export default {
 
     return {
       lavaY: lava.y,
+      floorBottom: -0.6, // underside of the tiles: below this a ball can't land anymore
       // Balls still in the running (the slow-mo director watches these for a deciding fall).
       contenders: () => (running ? ctx.players.filter((p) => !p.ball.data.out) : []),
       start() { running = true; },
-
-      onAction(p) {
-        if (!running || p.ball.data.out) return;
-        const i = ctx.input(p);
-        if (p.ball.dash(i.x, i.y)) ctx.audio.whoosh();
-      },
 
       update(dt) {
         for (const p of ctx.players) {

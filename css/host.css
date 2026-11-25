@@ -30,14 +30,29 @@ body:not(.in-lobby) .lobby-only { display: none !important; }
 .room-code { font-size: 64px; font-weight: 700; letter-spacing: 10px; color: var(--hot); line-height: 1; padding-left: 10px; }
 .net-status { font-size: 13px; color: #a01840; min-height: 1em; margin: 6px 0 0; }
 
-#picker { right: 2vw; width: min(400px, 30vw); display: flex; flex-direction: column; gap: 12px; }
+#picker { right: 2vw; width: min(470px, 34vw); max-height: 96vh; display: flex; flex-direction: column; gap: 12px; }
 #picker h2 { margin: 0; font-size: 26px; }
-.games { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.games { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; max-height: 52vh; overflow-y: auto; padding: 2px; }
 .gcard {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
-  padding: 12px; border-radius: 16px; border: 3px solid #e3defc; background: #fff; color: var(--ink);
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px; text-align: left;
+  padding: 6px 6px 8px; border-radius: 16px; border: 3px solid #e3defc; background: #fff; color: var(--ink);
   transition: transform .1s;
 }
+.gthumb {
+  display: grid; place-items: center; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden;
+  background: linear-gradient(135deg, #ffe8a3, #ffb3c6);
+}
+.gthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gcard .gname { padding: 0 4px; font-size: 15px; }
+.maps { display: flex; gap: 8px; }
+.mcard {
+  flex: 1; display: flex; flex-direction: column; gap: 3px; padding: 4px; border-radius: 12px; border: 3px solid #e3defc;
+  background: #fff; font-size: 12px; font-weight: 700; color: var(--ink); min-width: 0;
+}
+.mcard img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; display: block; }
+.mcard .gemoji { aspect-ratio: 16 / 9; display: grid; place-items: center; font-size: 24px; }
+.mcard.sel { border-color: var(--purple); background: #efeaff; }
+.pchip em.wins { background: #ffe0e6; }
 .gcard:hover { transform: translateY(-2px); }
 .gcard.sel { border-color: var(--purple); background: #efeaff; box-shadow: 0 4px 0 var(--purple); }
 .gemoji { font-size: 28px; }

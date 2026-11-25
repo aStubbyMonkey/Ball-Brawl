@@ -12,7 +12,7 @@ export class HostUI {
     this._announceTimer = null;
     $('start-btn').onclick = () => this.h.onStart();
     $('kb-btn').onclick = () => this.h.onAddKeyboard();
-    $('rounds').onchange = (e) => this.h.onRounds(+e.target.value);
+    $('rounds').onchange = (e) => this.h.onRounds(e.target.value);
     $('results').onclick = () => this.h.onSkip();
     $('winner').onclick = () => this.h.onSkip();
   }
@@ -34,13 +34,13 @@ export class HostUI {
     document.body.classList.toggle('in-lobby', on);
   }
 
-  renderLobby({ players, games, selected, round, rounds, vipId, canStart }) {
+  renderLobby({ players, games, selected, map, round, rounds, mode, target, vipId, canStart }) {
     $('player-count').textContent = players.length ? `${players.length} player${players.length > 1 ? 's' : ''}` : 'Waiting for players…';
     $('players').innerHTML = players.map((p) => `
       <div class="pchip ${p.connected ? '' : 'away'}">
         ${dot(p.color)}<span>${esc(p.name)}</span>
         ${p.id === vipId ? '<b title="VIP picks the game">⭐</b>' : ''}
-        ${p.score ? `<em>${p.score}</em>` : ''}
+        ${p.score ? `<em>${p.score}</em>` : ''}${p.wins ? `<em class="wins">🏆${p.wins}</em>` : ''}
         ${p.connected ? '' : '<small>away</small>'}
         <span class="mod">
           <button data-kick="${esc(p.id)}" title="Kick (they can rejoin)">✕</button>
@@ -54,16 +54,33 @@ export class HostUI {
 
     const cards = [{ id: 'random', name: 'Surprise me', emoji: '🎲', tagline: 'Random game' }, ...games];
     const grid = $('games');
+    // Each card shows a picture of the level (img/thumbs/<id>.jpg); the emoji is the fallback.
     grid.innerHTML = cards.map((g) => `
-      <button class="gcard ${g.id === selected ? 'sel' : ''}" data-id="${esc(g.id)}">
-        <span class="gemoji">${g.emoji || '🎮'}</span>
+      <button class="gcard ${g.id === selected ? 'sel' : ''}" data-id="${esc(g.id)}" title="${esc(g.tagline || '')}">
+        <span class="gthumb">${g.id === 'random' ? '<span class="gemoji">🎲</span>'
+          : `<img src="img/thumbs/${esc(g.id)}.jpg" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'gemoji',textContent:'${g.emoji || '🎮'}'}))">`}</span>
         <span class="gname">${esc(g.name)}</span>
-        <span class="gtag">${esc(g.tagline || '')}</span>
       </button>`).join('');
     grid.querySelectorAll('.gcard').forEach((b) => { b.onclick = () => this.h.onPick(b.dataset.id); });
 
-    $('round-info').textContent = round > 0 ? `Round ${round + 1} of ${rounds}` : `Match: ${rounds} rounds`;
-    $('rounds').value = String(rounds);
+    // Map picker for games with several maps (Ball Race tracks, golf courses).
+    const def = games.find((g) => g.id === selected);
+    const mapsEl = $('maps');
+    mapsEl.classList.toggle('hidden', !def?.maps?.length);
+    if (def?.maps?.length) {
+      const opts = [{ id: 'random', name: 'Random' }, ...def.maps];
+      mapsEl.innerHTML = opts.map((m) => `
+        <button class="mcard ${m.id === map ? 'sel' : ''}" data-id="${esc(m.id)}">
+          ${m.id === 'random' ? '<span class="gemoji">🎲</span>' : `<img src="img/thumbs/${esc(def.id)}-${esc(m.id)}.jpg" alt="" onerror="this.remove()">`}
+          <span>${esc(m.name)}</span>
+        </button>`).join('');
+      mapsEl.querySelectorAll('.mcard').forEach((b) => { b.onclick = () => this.h.onPickMap(b.dataset.id); });
+    }
+
+    $('round-info').textContent = mode === 'wins'
+      ? `First to ${target} wins`
+      : round > 0 ? `Round ${round + 1} of ${rounds}` : `Match: ${rounds} round${rounds > 1 ? 's' : ''}`;
+    $('rounds').value = mode === 'wins' ? `w${target}` : `r${rounds}`;
     $('start-btn').disabled = !canStart;
   }
 
@@ -97,9 +114,9 @@ export class HostUI {
     this._announceTimer = setTimeout(() => el.classList.remove('show'), ms);
   }
 
-  showIntro(def) {
+  showIntro(def, mapName) {
     $('intro-emoji').textContent = def.emoji || '🎮';
-    $('intro-name').textContent = def.name;
+    $('intro-name').textContent = mapName ? `${def.name}: ${mapName}` : def.name;
     $('intro-how').textContent = def.howTo || '';
     const el = $('intro');
     el.classList.remove('hidden', 'leaving');
@@ -119,14 +136,15 @@ export class HostUI {
     this._introT = setTimeout(() => el.classList.add('hidden'), 450);
   }
 
-  showResults(title, rows, footer) {
+  showResults(title, rows, footer, mode = 'rounds') {
     $('results-title').textContent = title;
+    document.querySelector('#results .rhead span:last-child').textContent = mode === 'wins' ? 'Wins' : 'Total';
     $('results-rows').innerHTML = rows.map((r, i) => `
       <div class="rrow" style="animation-delay:${i * 0.12}s">
         <span class="place">${r.placeLabel}</span>${dot(r.player.color)}
         <span class="rname">${esc(r.player.name)}</span>
         <span class="gain">${r.gain ? '+' + r.gain : ''}</span>
-        <span class="total">${r.player.score}</span>
+        <span class="total">${mode === 'wins' ? '🏆' + r.player.wins : r.player.score}</span>
       </div>`).join('');
     $('results-footer').textContent = footer || '';
     $('results').classList.remove('hidden');
@@ -134,9 +152,9 @@ export class HostUI {
   }
   hideResults() { $('results').classList.add('hidden'); document.body.classList.remove('celebrating'); }
 
-  showWinner(winners, rows) {
+  showWinner(winners, rows, mode = 'rounds') {
     $('winner-name').innerHTML = winners.map((p) => `${dot(p.color)}${esc(p.name)}`).join(' &amp; ');
-    $('winner-rows').innerHTML = rows.map((r) => `<div>${r.placeLabel} ${esc(r.player.name)}: <b>${r.player.score}</b></div>`).join('');
+    $('winner-rows').innerHTML = rows.map((r) => `<div>${r.placeLabel} ${esc(r.player.name)}: <b>${mode === 'wins' ? `🏆${r.player.wins} · ` : ''}${r.player.score} pts</b></div>`).join('');
     $('winner').classList.remove('hidden');
     document.body.classList.add('celebrating');
   }

@@ -185,13 +185,20 @@ function flash(el, text) {
 
 // ---------- playing ----------
 const actionBtn = $('action-btn');
+let holding = false;
 actionBtn.addEventListener('pointerdown', (e) => {
   e.preventDefault();
+  actionBtn.setPointerCapture?.(e.pointerId);
+  holding = true;
   actionBtn.classList.add('pressed');
   net.send({ t: 'action' });
   buzz(15);
 });
-const unpress = () => actionBtn.classList.remove('pressed');
+// Release matters too (e.g. mini golf: hold to charge, let go to putt).
+const unpress = () => {
+  actionBtn.classList.remove('pressed');
+  if (holding) { holding = false; net.send({ t: 'action', up: true }); }
+};
 actionBtn.addEventListener('pointerup', unpress);
 actionBtn.addEventListener('pointercancel', unpress);
 actionBtn.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -208,6 +215,7 @@ function onMessage(msg) {
       break;
     case 'phase': renderPhase(msg); break;
     case 'buzz': buzz(msg.ms || 60); break;
+    case 'fx': feedback(msg.kind); break;
     case 'kicked':
       state.kicked = true;
       net.close();
@@ -301,6 +309,32 @@ setInterval(() => {
 
 // ---------- helpers ----------
 function buzz(ms) { try { navigator.vibrate?.(ms); } catch {} }
+
+// Game feedback: a vibration pattern (Android) + a colored flash on screen (works everywhere,
+// so iPhones, which can't vibrate from a web page, still feel the hits).
+const FEEL = {
+  hit: { buzz: [30], color: '#ffffff', a: 0.35 },
+  bighit: { buzz: [70, 30, 50], color: '#ff4d6d', a: 0.6, shake: true },
+  out: { buzz: [260, 90, 260], color: '#ff7b00', a: 0.75, shake: true },
+  win: { buzz: [80, 60, 80, 60, 220], color: '#ffd60a', a: 0.7 },
+  collect: { buzz: [14], color: '#ffd60a', a: 0.3 },
+  boost: { buzz: [45], color: '#4cc9f0', a: 0.4 },
+  sink: { buzz: [60, 40, 140], color: '#7bd389', a: 0.6 },
+  tick: { buzz: [18], color: '#ffffff', a: 0.15 },
+  go: { buzz: [110], color: '#7bd389', a: 0.45 },
+};
+let flashT = null;
+function feedback(kind) {
+  const f = FEEL[kind];
+  if (!f) return;
+  buzz(f.buzz);
+  const el = $('hit-flash');
+  el.style.setProperty('--flash', f.color);
+  el.style.setProperty('--alpha', f.a);
+  el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
+  if (f.shake) { document.body.classList.remove('shake'); void document.body.offsetWidth; document.body.classList.add('shake'); }
+  clearTimeout(flashT); flashT = setTimeout(() => document.body.classList.remove('shake'), 400);
+}
 
 let wakeLock = null;
 async function requestWakeLock() {

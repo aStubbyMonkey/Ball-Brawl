@@ -12,12 +12,15 @@
 //   ctx.fx            burst / splash / poof / confetti / popText
 //   ctx.audio         bonk / splash / pickup / whoosh / beep / fanfare ...
 //   ctx.tell(p, title, text)     update that player's phone screen
-//   ctx.buzz(p, ms)   vibrate their phone (Android)
+//   ctx.feel(p, kind) phone vibration + screen flash: 'hit' 'bighit' 'out' 'win' 'collect' 'boost' 'sink'
 //   ctx.announce(big, small, ms) big text on the TV
 //   ctx.setTimer(seconds|null)   HUD timer
 //   ctx.setScores([{player, value, out}] | null)   HUD scoreboard for this round
 //   ctx.end(groups)   finish the round. groups = [[1st place players], [2nd], ...]
 //   ctx.dramatic(p)   slow-mo close-up on a player right now (e.g. about to cross the finish line)
+//   ctx.map           which map was picked, if the game lists `maps` (see ballRace.js / miniGolf.js)
+//
+// Handy: p.ball.launch(vx, vy, vz) flings a ball (boost/jump pads). js/games/course.js has track pieces.
 //
 // Set `theme` below for the sky and scenery ('meadow', 'volcano', 'candy', 'skytower'; see games/env.js).
 // The round starts in stages: during the countdown balls are frozen; at GO they can roll; one second
@@ -34,7 +37,8 @@ export default {
   theme: 'meadow',
   tagline: 'One line shown in the picker',
   howTo: 'Shown on the phones and TV during the countdown.',
-  actionLabel: 'BOOST!', // phone button text, or null to hide it
+  actionLabel: null, // phone button text (e.g. 'HOLD TO PUTT'), or null to hide the button
+  // maps: [{ id: 'a', name: 'Map A', theme: 'meadow' }],  // optional: the TV shows a map picker
   minPlayers: 1,
 
   create(ctx) {
@@ -53,6 +57,7 @@ export default {
       // Optional: lets the TV predict a deciding fall into lava and play it in slow-mo.
       // contenders: () => ctx.players.filter((p) => !p.ball.data.out),
       // lavaY: lava.y,
+      // floorBottom: -0.6, // underside of the lowest floor: only falls below this count as "doomed"
       start() { running = true; },                  // a second after GO
       update(dt) {                                  // fixed 60Hz step
         if (!running) return;
@@ -61,8 +66,9 @@ export default {
         if (timeLeft <= 0) { running = false; ctx.end(rankGroups(ctx.players, (p) => p.ball.data.points)); }
       },
       frame(dt) {},                                 // per rendered frame (animations)
-      onAction(p) { const i = ctx.input(p); p.ball.dash(i.x, i.y); },
-      onHit(ballA, ballB, impact) {},               // two balls collided
+      onAction(p) {},                               // phone button pressed
+      onActionUp(p) {},                             // phone button released
+      onHit(ballA, ballB, impact, { toBall, toOther }) {}, // two balls collided (how hard each got knocked)
       onPlayerLeave(p) {},
       dispose() {},                                 // anything not in ctx.level
     };

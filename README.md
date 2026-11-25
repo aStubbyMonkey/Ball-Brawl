@@ -9,10 +9,25 @@ It's plain HTML/JS with no build step: Three.js for rendering, cannon-es for phy
 2. Players scan the QR code (or open `join.html` and type the room code), pick a name and color, then dress up
    their ball with the arrows next to its hat, eyes and body (plus a pattern). Drag the ball to spin it.
 3. Players tap **Join**, which also asks for tilt permission on iPhone, then hold the phone comfortably and tap to set neutral.
-4. The VIP (first phone to join, marked ⭐) or the TV picks a game and hits **Start**.
+4. The VIP (first phone to join, marked ⭐) or the TV picks a game (and a track/course for Ball Race and
+   Mini Golf), picks the match length (**3/5/7/10 rounds** or **First to 3/5 wins**) and hits **Start**.
 
-No phones handy? Click **⌨ Add keyboard player** on the TV (WASD / Arrows / IJKL; Space / Enter / U to boost),
-or open `index.html?kb=2`.
+No phones handy? Click **⌨ Add keyboard player** on the TV (WASD / Arrows / IJKL; Space / Enter / U is the
+button, used by Mini Golf: hold to charge, let go to putt), or open `index.html?kb=2`.
+
+### The games
+
+| Game | What you do |
+| --- | --- |
+| Bump Arena | Ram others into the lava. The faster ball wins the bonk. Most knockouts wins. |
+| Last Ball Rolling | The floor crumbles from the edges. Last ball standing wins. |
+| Tower Drop | Tiles vanish when touched; drop floor to floor. Last ball standing wins. |
+| Ball Race | 3 tracks (Meadow Dash, Candy Canyon, Lava Leap) with boost pads, jump pads and obstacles. |
+| Gem Grab | Collect the most gems (more gems with more players). Gold stars are worth 5; big hits make people spill. |
+| Mini Golf | Everyone putts at once on one of 3 holes. Tilt to aim, hold to charge, let go. Fewest strokes wins. |
+
+There's no boost button: speed is your weapon. Phones vibrate (Android) and flash (all phones) when you get hit,
+fall, collect, boost or win.
 
 ## Deploy (GitHub Pages)
 
@@ -37,17 +52,22 @@ js/controller/             phone: tilt.js (sensor → stick, calibration, touch 
                            preview.js (3D character preview on the join screen)
 js/host/main.js            TV state machine: lobby → intro → playing → results → winner
 js/host/engine.js          Three.js scene, cannon world, fixed-step loop, camera, level containers
-js/host/ball.js            player ball: physics, rolling mesh, googly eyes, hat, label, trail, dash
+js/host/ball.js            player ball: physics, rolling mesh, outfit, label, trail, launch(), coyote time
 js/host/{fx,audio,ui,keyboard}.js   particles, synth SFX, DOM overlays, test keyboard input
 js/games/index.js          ← the game list (add/remove games here)
 js/games/_template.js      ← copy this to make a new mini-game (documents the whole ctx API)
 js/games/helpers.js        platforms, tiles, boxes, spawn rings, ranking helpers
+js/games/course.js         track pieces: sloped roads, corner joints, pads, sweepers, bumpers, pushers, arches, flags
 js/games/lava.js           the animated lava sea (shader, embers, bubbles)
 js/games/env.js            level themes: sky, clouds, birds, wind streaks, floating motes, scenery
 js/games/lobby.js          the lobby is just a mini-game that never ends
 js/games/bumpArena.js      knock others into lava, most KOs wins
 js/games/lastBallRolling.js  crumbling tile floor, last ball standing
 js/games/towerDrop.js      5 stacked floors, tiles vanish when touched, follow camera
+js/games/ballRace.js       3 race tracks (tracks are data at the top of the file)
+js/games/gemGrab.js        collect gems, scaled to the player count
+js/games/miniGolf.js       3 mini golf holes (holes are data at the top of the file)
+img/thumbs/                pictures on the TV game picker (<game-id>.jpg and <game-id>-<map-id>.jpg)
 ```
 
 ### Moderating
@@ -68,9 +88,15 @@ Main applies tilt to every ball automatically. Change the feel per game with `p.
 Want a bumper that launches balls? Give any physics body a `bounce` value (e.g. `body.bounce = 12`).
 `ctx.engine.follow(() => positions)` makes the camera auto-frame a set of balls.
 Pick a look with `theme: 'meadow' | 'volcano' | 'candy' | 'skytower'` (or add one in `env.js`).
+Several maps? Add `maps: [{ id, name, theme }]` to the game and read `ctx.map` in `create()`; the TV shows a map picker.
+Use the phone button with `actionLabel`, `onAction(p)` (pressed) and `onActionUp(p)` (released).
+Phone feedback: `ctx.feel(p, 'hit' | 'bighit' | 'out' | 'win' | 'collect' | 'boost' | 'sink')`.
+Thumbnail: drop a 16:9 picture at `img/thumbs/<id>.jpg` (the emoji shows if it's missing).
 
-**Slow-mo finishes:** return `contenders()` (players still in) and `lavaY` from `create()`, and when a fall
-would decide the round, the TV predicts it, slows time, zooms in on the faller, then swings to the winner.
+**Slow-mo finishes:** return `contenders()` (players still in), `lavaY` and `floorBottom` (the underside of the
+lowest floor) from `create()`. When a fall would decide the round, the TV sweeps the ball's whole body along its
+flight path; only if it's below every floor and nothing at all is in the way of the lava does it slow time, zoom in
+on the faller, then swing to the winner.
 For races, call `ctx.dramatic(player)` when someone is about to cross the line.
 
 **Adding a cosmetic:** add `{ id, name }` to the list in `js/cosmetics/catalog.js`, then a builder with the same
@@ -90,6 +116,6 @@ id in `js/cosmetics/parts.js` (or a painter in `skins.js` for a pattern).
 
 ## Ideas / TODO
 
-- Ball Race (drifty obstacle course), Collect-a-thon (glowing orbs)
-- Unlockable hats/skins (`locked` flag already exists in `js/cosmetics/catalog.js`)
-- Music, per-game camera follow, team modes
+- Music (your own tracks: one loop per theme)
+- Croquet (reuses the Mini Golf aiming)
+- Team modes

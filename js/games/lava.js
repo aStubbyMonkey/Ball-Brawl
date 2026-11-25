@@ -42,27 +42,31 @@ uniform float uTime;
 varying vec2 vXZ; varying float vH;
 #include <fog_pars_fragment>
 ${NOISE}
+// Cartoon lava: a few flat color bands (no photo-real gradients), chunky dark crust
+// islands with bright rims, and wobbly glowing crest lines.
 void main(){
-  vec2 p = vXZ * 0.07;
-  vec2 flow = vec2(uTime*0.035, uTime*0.022);
-  float warp = fbm(p*0.7 - flow);
-  float n = fbm(p + flow + warp*0.7);
-  // Bright veins between drifting crust plates.
-  float vein = 1.0 - abs(fbm(p*1.7 + vec2(-uTime*0.05, uTime*0.04) + warp*0.4));
-  vein = pow(vein, 10.0);
-  float crust = smoothstep(-0.05, 0.3, fbm(p*1.8 + 4.0 + flow*1.6)) * 0.9;
+  vec2 p = vXZ * 0.06;
+  vec2 flow = vec2(uTime*0.03, uTime*0.02);
+  float warp = snoise(p*0.8 - flow) * 0.6;
+  float n = fbm(p + flow + warp);
+  float band = floor(clamp(n*1.6 + 1.6, 0.0, 3.99));       // 0..3
+  vec3 c0 = vec3(0.62, 0.04, 0.02);   // deep red
+  vec3 c1 = vec3(0.98, 0.20, 0.02);   // orange
+  vec3 c2 = vec3(1.00, 0.45, 0.03);   // light orange
+  vec3 c3 = vec3(1.00, 0.78, 0.18);   // yellow
+  vec3 col = band < 1.0 ? c0 : band < 2.0 ? c1 : band < 3.0 ? c2 : c3;
 
-  // (Linear colors; three converts to sRGB at the end, which brightens them.)
-  vec3 deep   = vec3(0.30, 0.012, 0.0);
-  vec3 orange = vec3(0.95, 0.16, 0.0);
-  vec3 yellow = vec3(1.0, 0.55, 0.05);
-  vec3 rock   = vec3(0.05, 0.008, 0.01);
-  vec3 col = mix(deep, orange, smoothstep(-0.4, 0.5, n));
-  col = mix(col, yellow, smoothstep(0.45, 0.85, n));
-  col = mix(col, rock, crust * (1.0 - vein) * 0.85);
-  col += vec3(1.0, 0.6, 0.15) * vein * 0.9;
-  col += vec3(0.9, 0.25, 0.0) * max(vH, 0.0) * 0.8;            // glowing wave crests
-  col *= 0.93 + 0.09 * sin(uTime * 2.2 + n * 7.0);              // slow breathing pulse
+  // Crust: rounded floating rock islands with a hot outline.
+  float k = snoise(p*2.2 + vec2(4.0) + flow*1.4) + warp*0.3;
+  float crust = smoothstep(0.42, 0.46, k);
+  float rim = smoothstep(0.34, 0.38, k) - crust;
+  col = mix(col, vec3(0.16, 0.04, 0.06), crust);
+  col = mix(col, vec3(1.0, 0.85, 0.3), rim);
+
+  // Glowy crest lines riding the waves.
+  float crest = smoothstep(0.17, 0.2, vH) - smoothstep(0.24, 0.27, vH);
+  col = mix(col, vec3(1.0, 0.92, 0.55), crest * (1.0 - crust) * 0.8);
+  col *= 0.96 + 0.05 * sin(uTime * 2.0 + n * 6.0);
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
   #include <fog_fragment>

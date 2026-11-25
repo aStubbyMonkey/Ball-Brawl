@@ -8,7 +8,7 @@ export default {
   name: 'Lobby',
   hidden: true, // not shown in the game picker
   theme: 'meadow',
-  actionLabel: 'BOOST!',
+  actionLabel: null,
   howTo: 'Roll around while everyone joins!',
 
   create(ctx) {
@@ -47,7 +47,6 @@ export default {
 
     return {
       onPlayerJoin(p) { drop(p); ctx.audio.join(); },
-      onAction(p) { if (p.ball.dash(ctx.input(p).x, ctx.input(p).y)) ctx.audio.whoosh(); },
       update() {
         for (const p of ctx.players) if (p.ball.active && p.ball.position.y < -6) { drop(p); ctx.fx.poof(p.ball.position); }
         if (beachBody.position.y < -6) { beachBody.position.set(0, 5, 0); beachBody.velocity.setZero(); }

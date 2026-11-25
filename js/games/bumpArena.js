@@ -15,8 +15,8 @@ export default {
   emoji: '💥',
   theme: 'volcano',
   tagline: 'Bump other balls into the lava!',
-  howTo: 'Tilt to roll. Tap BOOST to dash. Knock others into the lava. Spinners and bumpers launch you! Every knockout is a point.',
-  actionLabel: 'BOOST!',
+  howTo: 'Tilt to roll. Build up speed and ram others into the lava: the faster ball wins the bonk! Spinners and bumpers launch you. Every knockout is a point.',
+  actionLabel: null,
   minPlayers: 1,
 
   create(ctx) {
@@ -100,13 +100,13 @@ export default {
       ctx.engine.addShake(0.25);
       p.ball.deactivate();
       d.falls++;
-      ctx.buzz(p, 300);
+      ctx.feel(p, 'out');
       const credit = d.lastHitBy && ctx.engine.time - d.lastHitAt < CREDIT_WINDOW ? d.lastHitBy : null;
       if (credit && credit !== p) {
         credit.ball.data.kos++;
         ctx.announce(`${credit.name} bonked ${p.name}!`, null, 1400);
         ctx.tell(credit, 'Knockout! +1', 'Keep bumping!');
-        ctx.buzz(credit, 80);
+        ctx.feel(credit, 'collect');
       } else {
         ctx.announce(`${p.name} took a dip!`, null, 1200);
       }
@@ -119,12 +119,6 @@ export default {
     return {
       lavaY: lava.y,
       start() { running = true; },
-
-      onAction(p) {
-        if (!running) return;
-        const i = ctx.input(p);
-        if (p.ball.dash(i.x, i.y)) ctx.audio.whoosh();
-      },
 
       onHit(a, b) {
         const t = ctx.engine.time;

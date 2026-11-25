@@ -24,13 +24,11 @@ export class Ball {
     const R = this.tuning.radius;
     this.radius = R;
     this.active = false;
-    this.dashTimer = 0;
-    this.dashGrace = 0; // brief window after a dash where we don't brake the burst away
+    this.grace = 0;     // brief window after a launch where steering is relaxed
     this.stun = 0;      // brief window after a hit with reduced control
     this.rollQ = new THREE.Quaternion();
     this.squash = 0; this.squashVel = 0;
     this.yaw = 0;
-    this.blink = 2 + Math.random() * 3;
     this.data = {}; // scratch space for games (lives, score, lastHitBy...)
 
     const body = new CANNON.Body({
@@ -96,7 +94,7 @@ export class Ball {
     this.active = true;
     this.yaw = yaw;
     this.root.visible = true;
-    this.dashTimer = 0; this.dashGrace = 0; this.stun = 0;
+    this.grace = 0; this.stun = 0; this.airTime = 0;
     for (const t of this.trail) { t.visible = false; t.userData.life = 0; }
     this.sync();
   }
@@ -122,13 +120,15 @@ export class Ball {
   applyInput(x, y, dt) {
     if (!this.active) return;
     const T = this.tuning;
+    if (!T.maxAccel) return; // games like mini golf turn tilt-steering off
     const v = this.body.velocity;
     // Tilt picks a target velocity; accelerate toward it (no tilt = brake to a stop).
     let ax = (x * T.maxSpeed - v.x) * T.accel;
     let az = (-y * T.maxSpeed - v.z) * T.accel;
-    let lim = T.maxAccel * (this._groundedCache ? 1 : T.airControl);
+    // Coyote time: full control for a moment after rolling off an edge, so a late save still counts.
+    let lim = T.maxAccel * (this.airTime < 0.15 ? 1 : T.airControl);
     if (this.stun > 0) lim *= 0.15;
-    if (this.dashGrace > 0) lim *= 0.2;
+    if (this.grace > 0) lim *= 0.2;
     const m = Math.hypot(ax, az);
     if (m > lim) { ax *= lim / m; az *= lim / m; }
     // NOTE: no second argument. cannon's applyForce point is *relative* to the center;
@@ -139,29 +139,24 @@ export class Ball {
   /** Called once per fixed step before applyInput. */
   step(dt) {
     if (!this.active) return;
-    this.dashTimer = Math.max(0, this.dashTimer - dt);
-    this.dashGrace = Math.max(0, this.dashGrace - dt);
+    this.grace = Math.max(0, this.grace - dt);
     this.stun = Math.max(0, this.stun - dt);
     this._groundedCache = this.isGrounded();
+    this.airTime = this._groundedCache ? 0 : (this.airTime || 0) + dt;
   }
 
   /** Knock the ball around and briefly reduce its control. */
   stagger(seconds = this.tuning.hitStun) { this.stun = Math.max(this.stun, seconds); }
 
-  /** Quick burst. Direction = tilt if tilting, else current velocity. */
-  dash(x, y) {
-    if (!this.active || this.dashTimer > 0) return false;
-    let dx = x, dz = -y;
-    if (Math.hypot(dx, dz) < 0.2) { dx = this.body.velocity.x; dz = this.body.velocity.z; }
-    const m = Math.hypot(dx, dz);
-    if (m < 0.01) { dx = Math.sin(this.yaw); dz = Math.cos(this.yaw); }
-    else { dx /= m; dz /= m; }
-    const I = this.tuning.dashImpulse * this.tuning.mass;
-    this.body.applyImpulse(new CANNON.Vec3(dx * I, 1.5, dz * I));
-    this.dashTimer = this.tuning.dashCooldown;
-    this.dashGrace = 0.3;
+  /**
+   * Fling the ball (boost pads, jump pads, launchers). Sets the velocity directly and
+   * relaxes the steering for `grace` seconds so the controller doesn't brake the burst.
+   */
+  launch(vx, vy, vz, grace = 0.5) {
+    if (!this.active) return;
+    this.body.velocity.set(vx, vy, vz);
+    this.grace = Math.max(this.grace, grace);
     this.poke(0.35);
-    return true;
   }
 
   /** Visual squash-and-stretch kick. */

@@ -1,6 +1,6 @@
 // Cosmetic catalog shared by the TV and the phones.
 // To add an item: add an entry here, then a builder with the same id in parts.js
-// (hats / eyes / outfits) or skins.js (ball patterns). `locked` is reserved for unlockables.
+// (hats / eyes / outfits) or skins.js (ball patterns). Everything is free for everyone: no unlocks.
 
 export const COLORS = [
   '#ff4d6d', '#ff9f1c', '#ffd60a', '#7bd389', '#2ec4b6', '#4cc9f0', '#4361ee', '#9b5de5',

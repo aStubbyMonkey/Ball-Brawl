@@ -19,7 +19,8 @@ const audio = new Sfx();
 
 const players = new Map(); // id -> player
 let joinCounter = 0;
-const match = { round: 0, rounds: CONFIG.roundsPerMatch, selected: 'random', lastGame: null };
+// mode 'rounds': play `rounds` rounds, most points wins. mode 'wins': first to `target` round wins.
+const match = { round: 0, rounds: CONFIG.roundsPerMatch, mode: 'rounds', target: 3, selected: 'random', map: 'random', lastGame: null };
 let phase = 'lobby'; // lobby | intro | playing | results | winner
 let current = null;  // { def, ctx, inst }
 let timers = [];
@@ -31,14 +32,20 @@ const vip = () => playerList().find((p) => p.connected && !p.keyboard) || null;
 
 // ---------------------------------------------------------------- UI + input
 const ui = new HostUI({
-  onPick(id) { match.selected = id; refreshLobby(); sendPhaseAll(); },
+  onPick(id) { if (match.selected !== id) match.map = 'random'; match.selected = id; refreshLobby(); sendPhaseAll(); },
+  onPickMap(id) { match.map = id; refreshLobby(); },
   onStart: () => startRound(),
   onAddKeyboard: () => addKeyboardPlayer(),
-  onRounds(n) { match.rounds = Math.max(1, n | 0); refreshLobby(); },
+  onRounds(v) {
+    // "r5" = 5 rounds, "w3" = first to 3 wins
+    const n = Math.max(1, parseInt(String(v).slice(1), 10) || 3);
+    if (String(v)[0] === 'w') { match.mode = 'wins'; match.target = n; } else { match.mode = 'rounds'; match.rounds = n; }
+    refreshLobby();
+  },
   onSkip: () => advance(),
   onKick: (id, ban) => kickPlayer(id, ban),
 });
-const kb = new Keyboard((pid) => onAction(players.get(pid)));
+const kb = new Keyboard((pid, up) => onAction(players.get(pid), up));
 const unlockAudio = () => { audio.unlock(); document.getElementById('sound-hint')?.remove(); };
 window.addEventListener('pointerdown', unlockAudio);
 window.addEventListener('keydown', unlockAudio);
@@ -55,7 +62,7 @@ function makePlayer({ id, name, color, hat, eyes, outfit, skin, client = null, k
     id, name: cleanName(name), color,
     hat: validItem('hat', hat), eyes: validItem('eyes', eyes), outfit: validItem('outfit', outfit), skin: validItem('skin', skin),
     client, keyboard, connected: true,
-    score: 0, order: joinCounter++,
+    score: 0, wins: 0, order: joinCounter++,
     input: { x: 0, y: 0 },
     status: null, removeTimer: null,
   };
@@ -163,9 +170,9 @@ const net = new HostNet({
   onMessage(client, msg) {
     const p = players.get(client.id);
     if (!p) return;
-    if (msg.t === 'action') onAction(p);
+    if (msg.t === 'action') onAction(p, !!msg.up);
     else if (msg.t === 'vip' && p === vip() && phase === 'lobby') {
-      if (msg.cmd === 'pick' && (msg.game === 'random' || gameById(msg.game))) { match.selected = msg.game; refreshLobby(); sendPhaseAll(); }
+      if (msg.cmd === 'pick' && (msg.game === 'random' || gameById(msg.game))) { if (match.selected !== msg.game) match.map = 'random'; match.selected = msg.game; refreshLobby(); sendPhaseAll(); }
       if (msg.cmd === 'start') startRound();
     }
   },
@@ -180,10 +187,15 @@ function scheduleRemoval(p) {
   p.removeTimer = setTimeout(() => { if (!p.connected && phase === 'lobby') removePlayer(p); }, CONFIG.lobbyDisconnectGraceMs);
 }
 
-function onAction(p) {
+/** Phone button pressed (up=false) or released (up=true). */
+function onAction(p, up = false) {
   if (!p || !current || !current.ctx.players.includes(p)) return;
-  if (phase === 'lobby' || phase === 'playing') current.inst.onAction?.(p);
+  if (phase !== 'lobby' && phase !== 'playing') return;
+  if (up) current.inst.onActionUp?.(p); else current.inst.onAction?.(p);
 }
+
+/** Phone feedback: a vibration pattern + a colored screen flash (the flash also works on iPhone). */
+function feel(p, kind) { if (p?.client && p.connected) p.client.send({ t: 'fx', kind }); }
 
 // ---------------------------------------------------------------- phone status
 function setStatus(p, title, text) { p.status = { title, text }; sendPhase(p); }
@@ -209,8 +221,8 @@ const sendPhaseAll = () => players.forEach(sendPhase);
 
 function refreshLobby() {
   ui.renderLobby({
-    players: playerList(), games: GAMES, selected: match.selected,
-    round: match.round, rounds: match.rounds, vipId: vip()?.id,
+    players: playerList(), games: GAMES, selected: match.selected, map: match.map,
+    round: match.round, rounds: match.rounds, mode: match.mode, target: match.target, vipId: vip()?.id,
     canStart: phase === 'lobby' && players.size > 0,
   });
 }
@@ -225,6 +237,8 @@ function makeCtx(def, level, participants) {
     tell: (p, title, text) => setStatus(p, title, text),
     tellAll: (title, text) => participants.forEach((p) => setStatus(p, title, text)),
     buzz: (p, ms) => p.client?.send({ t: 'buzz', ms }),
+    /** Phone feedback: 'hit' | 'bighit' | 'out' | 'win' | 'collect' | 'boost' | 'sink' | 'tick' | 'go' */
+    feel: (p, kind) => feel(p, kind),
     announce: (big, small, ms) => ui.announce(big, small, ms),
     setTimer: (s) => ui.setTimer(s),
     setScores: (rows) => ui.setScores(rows),
@@ -235,13 +249,14 @@ function makeCtx(def, level, participants) {
   return ctx;
 }
 
-function loadGame(def, participants) {
+function loadGame(def, participants, map = null) {
   unloadGame();
-  for (const p of participants) { p.ball.tuning = { ...CONFIG.ball }; p.ball.data = {}; }
+  for (const p of participants) { p.ball.tuning = { ...CONFIG.ball }; p.ball.data = {}; p.ball.body.linearDamping = 0.05; }
   const level = engine.createLevel();
   const ctx = makeCtx(def, level, participants);
+  ctx.map = map; // for games with several maps (Ball Race tracks, golf courses)
   current = { def, ctx, inst: {}, env: null };
-  current.env = buildTheme(ctx, def.theme || 'meadow');
+  current.env = buildTheme(ctx, def.maps?.find((m) => m.id === map)?.theme || def.theme || 'meadow');
   current.inst = def.create(ctx) || {};
 }
 
@@ -276,6 +291,12 @@ function pickGame() {
   const pool = GAMES.filter((g) => g.id !== match.lastGame);
   return (pool.length ? pool : GAMES)[Math.floor(Math.random() * (pool.length || GAMES.length))];
 }
+function pickMap(def) {
+  if (!def.maps?.length) return null;
+  if (match.selected === def.id && def.maps.some((m) => m.id === match.map)) return match.map;
+  return def.maps[Math.floor(Math.random() * def.maps.length)].id;
+}
+const matchOver = () => (match.mode === 'wins' ? playerList().some((p) => p.wins >= match.target) : match.round >= match.rounds);
 
 // Intro timing (ms): banner + camera swoop, then 3-2-1-GO. Players can move at GO;
 // the level itself (spinners, falling tiles, timers) wakes up HAZARD_DELAY later.
@@ -294,19 +315,22 @@ function startRound() {
   ui.showLobby(false);
   ui.setHud(def.name);
   engine.follow(null);
-  loadGame(def, participants);
+  const map = pickMap(def);
+  loadGame(def, participants, map);
   engine.swoopIn();
+  const mapName = def.maps?.find((m) => m.id === map)?.name;
   for (const p of players.values()) {
     p.status = participants.includes(p) ? { title: def.name, text: def.howTo } : { title: 'Hang tight!', text: "You'll join next round." };
   }
   sendPhaseAll();
-  ui.showIntro(def);
+  ui.showIntro(def, mapName);
 
   let n = 3;
   const tick = () => {
-    if (n > 0) { ui.countdown(n); audio.beep(); n--; later(COUNT_STEP, tick); return; }
+    if (n > 0) { ui.countdown(n); audio.beep(); participants.forEach((p) => feel(p, 'tick')); n--; later(COUNT_STEP, tick); return; }
     ui.countdown('GO!', true);
     audio.beep(true);
+    participants.forEach((p) => feel(p, 'go'));
     ui.hideIntro();
     phase = 'playing';             // balls can roll now...
     sendPhaseAll();
@@ -333,10 +357,11 @@ function endRound(groups) {
       p.score += pts;
       rows.push({ player: p, placeLabel: placeLabel(place), gain: pts });
       setStatus(p, place === 0 ? 'You won the round! 🎉' : `You placed #${place + 1}`, pts ? `+${pts} points · ${p.score} total` : `${p.score} points total`);
-      if (place === 0) p.client?.send({ t: 'buzz', ms: 200 });
+      if (place === 0) { p.wins++; feel(p, 'win'); }
     }
     place += g.length;
   }
+  for (const r of rows) r.wins = r.player.wins;
 
   const winners = groups[0] || [];
   const celebrate = () => {
@@ -356,20 +381,21 @@ function endRound(groups) {
   finale.active = false;
 
   match.round++;
-  const last = match.round >= match.rounds;
+  const last = matchOver();
   const def = current.def;
+  const progress = match.mode === 'wins' ? `First to ${match.target} wins` : `Round ${match.round} of ${match.rounds}`;
   later(2200, () => ui.showResults(`${def.name}: results`, rows,
-    last ? 'Final round done! Crowning the champion…' : `Round ${match.round} of ${match.rounds} · Tap to continue`));
+    last ? 'That settles it! Crowning the champion…' : `${progress} · Tap to continue`, match.mode));
   later(9000, advance);
   sendPhaseAll();
 }
 
 function advance() {
   if (phase === 'results') {
-    if (match.round >= match.rounds) showWinner();
+    if (matchOver()) showWinner();
     else enterLobby();
   } else if (phase === 'winner') {
-    for (const p of players.values()) p.score = 0;
+    for (const p of players.values()) { p.score = 0; p.wins = 0; }
     match.round = 0;
     enterLobby();
   }
@@ -379,15 +405,18 @@ function showWinner() {
   clearTimers();
   phase = 'winner';
   ui.hideResults();
-  const sorted = playerList().sort((a, b) => b.score - a.score);
-  const top = sorted.length ? sorted[0].score : 0;
-  const winners = sorted.filter((p) => p.score === top);
+  // Wins mode: most round wins (points break ties). Rounds mode: most points.
+  const key = (p) => (match.mode === 'wins' ? p.wins * 10000 + p.score : p.score);
+  const sorted = playerList().sort((a, b) => key(b) - key(a));
+  const top = sorted.length ? key(sorted[0]) : 0;
+  const winners = sorted.filter((p) => key(p) === top);
   let place = 0;
   const rows = sorted.map((p, i) => {
-    if (i > 0 && p.score < sorted[i - 1].score) place = i;
+    if (i > 0 && key(p) < key(sorted[i - 1])) place = i;
     return { player: p, placeLabel: placeLabel(place) };
   });
-  ui.showWinner(winners, rows);
+  ui.showWinner(winners, rows, match.mode);
+  winners.forEach((p) => feel(p, 'win'));
   // Everyone goes to the lobby arena; the camera zooms on the champion(s), who can roll around.
   ui.setHud(null);
   loadGame(LOBBY, playerList().filter((p) => p.connected));
@@ -419,24 +448,34 @@ function zoomOn(list) {
 // Race-style games can call ctx.dramatic(player) themselves (e.g. near the finish line).
 const finale = { active: false, kind: null, player: null, t: 0, saved: null };
 const _from = new CANNON.Vec3(), _to = new CANNON.Vec3(), _ray = new CANNON.RaycastResult();
-const FEET = [[0, 0], [0.3, 0], [-0.3, 0], [0, 0.3], [0, -0.3]];
+// Rays around the ball's whole footprint, so a sweep counts anything the sphere could touch.
+const FEET = [[0, 0]];
+for (let i = 0; i < 8; i++) FEET.push([Math.cos((i / 8) * Math.PI * 2) * 0.48, Math.sin((i / 8) * Math.PI * 2) * 0.48]);
 
-function predictDoom(ball, lavaY) {
-  if (ball._groundedCache) return false;
-  const b = ball.body, g = engine.world.gravity.y, h = 1 / 30;
-  let x = b.position.x, y = b.position.y - ball.radius * 0.9, z = b.position.z;
+/**
+ * True only when the ball is *certain* to hit the lava: it's already below the underside of
+ * every floor (game's `floorBottom`), falling, and a short sweep of its whole body down to the
+ * lava touches nothing (no tiles, walls, bumpers or other balls).
+ */
+function predictDoom(ball, inst) {
+  const b = ball.body, R = ball.radius;
+  if (inst.floorBottom === undefined || b.position.y + R > inst.floorBottom - 0.05 || b.velocity.y > 0.5) return false;
+  const g = engine.world.gravity.y, h = 1 / 30;
+  let x = b.position.x, y = b.position.y, z = b.position.z;
   let vx = b.velocity.x, vy = b.velocity.y, vz = b.velocity.z;
-  for (let i = 0; i < 60; i++) { // up to 2 seconds ahead
+  for (let i = 0; i < 36; i++) { // at most 1.2 s ahead
     const nx = x + vx * h, ny = y + vy * h, nz = z + vz * h;
     vy += g * h;
     for (const [ox, oz] of FEET) {
-      _from.set(x + ox, y, z + oz); _to.set(nx + ox, ny, nz + oz);
-      _ray.reset();
-      engine.world.raycastClosest(_from, _to, { skipBackfaces: true }, _ray);
-      if (_ray.hasHit && _ray.body !== b) return false; // lands on something: safe (for now)
+      for (const oy of [-R, 0]) {
+        _from.set(x + ox, y + oy, z + oz); _to.set(nx + ox, ny + oy, nz + oz);
+        _ray.reset();
+        engine.world.raycastClosest(_from, _to, {}, _ray);
+        if (_ray.hasHit && _ray.body !== b) return false;
+      }
     }
     x = nx; y = ny; z = nz;
-    if (y < lavaY) return true;
+    if (y - R < inst.lavaY) return true;
   }
   return false;
 }
@@ -464,14 +503,14 @@ function directorStep(dt) {
     // Safety net: if the round didn't end (they somehow survived), go back to normal.
     const age = engine.realTime - finale.t; // real seconds
     const b = finale.player.ball;
-    if (age > 3.5 || (finale.kind === 'ko' && b.active && b._groundedCache && age > 0.4)) cancelFinale();
+    if (age > (finale.kind === 'win' ? 2.2 : 3.5) || (finale.kind === 'ko' && b.active && b._groundedCache && age > 0.4)) cancelFinale();
     return;
   }
   if (!inst.contenders || inst.lavaY === undefined) return;
   const alive = inst.contenders();
   if (!alive.length || alive.length > 2) return; // only when this fall decides the round
   for (const p of alive) {
-    if (p.ball.active && predictDoom(p.ball, inst.lavaY)) { startFinale(p, 'ko'); return; }
+    if (p.ball.active && predictDoom(p.ball, inst)) { startFinale(p, 'ko'); return; }
   }
 }
 
@@ -481,11 +520,16 @@ function onBallHit(ball, otherBody, impact, normal) {
   const other = otherBody.ball;
   if (other) {
     if (ball.body.id > other.body.id || impact < 0.8) return; // handle each pair once
-    const I = Math.min(impact, 14) * ball.tuning.bonkBoost;
-    ball.body.applyImpulse(new CANNON.Vec3(-normal.x * I, 0.12 * I, -normal.z * I));
-    other.body.applyImpulse(new CANNON.Vec3(normal.x * I, 0.12 * I, normal.z * I));
+    // The faster ball wins the bonk: each ball gets knocked back by how fast the OTHER one
+    // was moving into it. Ram someone at full speed and they fly; you barely budge.
+    const va = Math.max(0, ball.body.velocity.x * normal.x + ball.body.velocity.z * normal.z);    // ball -> other
+    const vb = Math.max(0, -(other.body.velocity.x * normal.x + other.body.velocity.z * normal.z)); // other -> ball
+    const boost = ball.tuning.bonkBoost;
+    const toOther = Math.min(14, 0.6 + va * boost), toBall = Math.min(14, 0.6 + vb * boost);
+    other.body.applyImpulse(new CANNON.Vec3(normal.x * toOther, 0.1 * toOther, normal.z * toOther));
+    ball.body.applyImpulse(new CANNON.Vec3(-normal.x * toBall, 0.1 * toBall, -normal.z * toBall));
     const k = Math.min(1, impact / 10);
-    if (impact > 2) { ball.stagger(0.15 + k * 0.35); other.stagger(0.15 + k * 0.35); }
+    if (impact > 2) { ball.stagger(0.1 + Math.min(0.5, toBall * 0.05)); other.stagger(0.1 + Math.min(0.5, toOther * 0.05)); }
     if (impact > 1.5) {
       ball.poke(k * 0.6); other.poke(k * 0.6);
       const mid = new THREE.Vector3().addVectors(ball.position, other.position).multiplyScalar(0.5);
@@ -504,9 +548,12 @@ function onBallHit(ball, otherBody, impact, normal) {
         audio.bonk(k);
         fx.popText(mid, pick(WORDS.bonk), '#ffffff', 0.8);
       } else audio.bonk(k);
-      if (impact > 3) { ball.player.client?.send({ t: 'buzz', ms: 30 + k * 60 }); other.player.client?.send({ t: 'buzz', ms: 30 + k * 60 }); }
+      if (impact > 3) {
+        feel(ball.player, toBall > 5 ? 'bighit' : 'hit');
+        feel(other.player, toOther > 5 ? 'bighit' : 'hit');
+      }
     }
-    current.inst.onHit?.(ball, other, impact);
+    current.inst.onHit?.(ball, other, impact, { toBall, toOther });
   } else if (otherBody.bounce) {
     // Bumpers / spinners: a body with .bounce = N launches you away with impulse N.
     const I = otherBody.bounce * ball.tuning.mass;
@@ -518,7 +565,7 @@ function onBallHit(ball, otherBody, impact, normal) {
     fx.popText(ball.position, pick(WORDS.boing), '#4cc9f0', 1);
     fx.burst(ball.position, '#4cc9f0', { count: 10, speed: 5, up: 2, size: 0.1, life: 0.4 });
     engine.addShake(0.1);
-    ball.player.client?.send({ t: 'buzz', ms: 60 });
+    feel(ball.player, 'bighit');
     current.inst.onBodyHit?.(ball, otherBody, impact);
   } else if (otherBody.material === engine.mat.bouncy && impact > 1.5) {
     audio.bonk(Math.min(1, impact / 10));

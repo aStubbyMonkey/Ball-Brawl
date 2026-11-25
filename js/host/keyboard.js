@@ -13,10 +13,13 @@ export class Keyboard {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
       if (this.down.has(e.code)) return;
       this.down.add(e.code);
-      this.slots.forEach((pid, i) => { if (pid && LAYOUTS[i].action === e.code) onAction(pid); });
+      this.slots.forEach((pid, i) => { if (pid && LAYOUTS[i].action === e.code) onAction(pid, false); });
       if (LAYOUTS.some((l) => Object.values(l).includes(e.code))) e.preventDefault();
     });
-    window.addEventListener('keyup', (e) => this.down.delete(e.code));
+    window.addEventListener('keyup', (e) => {
+      this.down.delete(e.code);
+      this.slots.forEach((pid, i) => { if (pid && LAYOUTS[i].action === e.code) onAction(pid, true); });
+    });
     window.addEventListener('blur', () => this.down.clear());
   }
 

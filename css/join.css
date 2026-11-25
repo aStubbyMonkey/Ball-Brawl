@@ -130,6 +130,17 @@ button { font-family: inherit; cursor: pointer; }
   box-shadow: 0 8px 0 #9e1f3a; text-shadow: 0 3px 0 #0004; touch-action: manipulation;
 }
 .action-btn:active, .action-btn.pressed { transform: translateY(6px); box-shadow: 0 2px 0 #9e1f3a; }
+.hit-flash {
+  position: fixed; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at 50% 50%, transparent 30%, var(--flash, #fff) 100%);
+}
+.hit-flash.on { animation: flash .45s ease-out; }
+@keyframes flash { 0% { opacity: var(--alpha, .5); } 100% { opacity: 0; } }
+body.shake #screen-play { animation: shake .35s; }
+@keyframes shake {
+  20% { transform: translate(-6px, 3px); } 40% { transform: translate(5px, -4px); }
+  60% { transform: translate(-4px, -2px); } 80% { transform: translate(3px, 3px); }
+}
 .net-info { font-size: 11px; color: #fff6; margin: 0; }
 
 .vip { width: 100%; max-width: 420px; background: #0004; border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 10px; align-items: center; }

@@ -4,6 +4,9 @@ import lobby from './lobby.js';
 import bumpArena from './bumpArena.js';
 import lastBallRolling from './lastBallRolling.js';
 import towerDrop from './towerDrop.js';
+import ballRace from './ballRace.js';
+import gemGrab from './gemGrab.js';
+import miniGolf from './miniGolf.js';
 
 export const LOBBY = lobby;
 
@@ -11,8 +14,9 @@ export const GAMES = [
   bumpArena,
   lastBallRolling,
   towerDrop,
-  // ballRace,      // TODO: drifty obstacle course
-  // collectAThon,  // TODO: grab glowing orbs
+  ballRace,
+  gemGrab,
+  miniGolf,
 ];
 
 export const gameById = (id) => GAMES.find((g) => g.id === id);

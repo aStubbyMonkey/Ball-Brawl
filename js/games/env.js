@@ -12,17 +12,17 @@ export const THEMES = {
   },
   volcano: {
     sky: { top: '#5b3cc4', mid: '#ff9a8b', bottom: '#ffd29a', fog: '#ffab8f', fogNear: 55, fogFar: 230 },
-    clouds: { count: 8, y: [16, 30], r: [60, 110], tint: '#ffe1d6' },
+    clouds: { count: 8, y: [16, 30], r: [60, 110], tint: '#6e5a66', smoky: true },
     volcanoes: 3, wind: 0.5, motes: { color: '#ffcf8a', count: 70 },
   },
   candy: {
     sky: { top: '#6ec6ff', mid: '#c3a6ff', bottom: '#ff9eb5', fog: '#d9b8f5', fogNear: 55, fogFar: 220 },
-    clouds: { count: 12, y: [10, 26], r: [45, 100], tint: '#fff0fa' },
+    clouds: { count: 12, y: [10, 26], r: [45, 100], tint: '#8a7a8e', smoky: true },
     pillars: 9, balloons: 4, wind: 0.6, motes: { color: '#ffffff', count: 90 },
   },
   skytower: {
     sky: { top: '#2f6fd6', mid: '#9fd3ff', bottom: '#ffd5e5', fog: '#bfe0ff', fogNear: 60, fogFar: 240 },
-    clouds: { count: 22, y: [-6, 26], r: [18, 75] },
+    clouds: { count: 22, y: [-6, 26], r: [18, 75], lowSmoke: 6 }, // clouds near the lava turn to dark smoke
     birds: 3, wind: 1.6, motes: { color: '#ffffff', count: 120 },
   },
 };
@@ -50,13 +50,17 @@ export function buildTheme(ctx, name) {
 
   // ---- clouds: puffy clusters drifting with the wind
   if (th.clouds) {
-    const mat = new THREE.MeshStandardMaterial({ color: th.clouds.tint || '#ffffff', roughness: 1, emissive: th.clouds.tint || '#ffffff', emissiveIntensity: 0.35, flatShading: false });
+    const tint = th.clouds.tint || '#ffffff';
+    const mat = new THREE.MeshStandardMaterial({ color: tint, roughness: 1, emissive: tint, emissiveIntensity: th.clouds.smoky ? 0.1 : 0.35 });
+    // Over lava, clouds are sooty grey smoke instead of fluffy white.
+    const smoke = new THREE.MeshStandardMaterial({ color: '#4a4248', roughness: 1, emissive: '#2a1a1a', emissiveIntensity: 0.3 });
     const clouds = [];
     for (let i = 0; i < th.clouds.count; i++) {
       const c = new THREE.Group();
       const puffs = 4 + Math.floor(Math.random() * 4);
       for (let k = 0; k < puffs; k++) {
         const m = new THREE.Mesh(CLOUD_GEO, mat);
+        m.userData.cloudPuff = true;
         const s = rand(1.4, 3);
         m.position.set((k - puffs / 2) * 1.6 + rand(-0.5, 0.5), rand(-0.3, 0.8) * s * 0.4, rand(-1, 1));
         m.scale.set(s, s * 0.75, s);
@@ -66,6 +70,7 @@ export function buildTheme(ctx, name) {
       c.position.set(Math.cos(a) * r, rand(...th.clouds.y), Math.sin(a) * r);
       c.scale.setScalar(rand(0.8, 1.8));
       c.userData.speed = rand(0.6, 1.6);
+      if (th.clouds.lowSmoke !== undefined && c.position.y < th.clouds.lowSmoke) c.traverse((o) => { if (o.userData.cloudPuff) o.material = smoke; });
       L.add(c); clouds.push(c);
     }
     const maxR = th.clouds.r[1] + 10;

@@ -24,7 +24,7 @@ export default {
   theme: 'skytower',
   tagline: 'Floors vanish under you. Drop, drop, drop!',
   howTo: 'Tilt to roll. Every tile you touch falls away, so keep moving! Drop through the holes to the floor below. Fall off the last floor and you are out. Last ball standing wins!',
-  actionLabel: 'BOOST!',
+  actionLabel: null,
   minPlayers: 1,
 
   create(ctx) {
@@ -106,7 +106,7 @@ export default {
       ctx.audio.splash();
       ctx.engine.addShake(0.25);
       p.ball.deactivate();
-      ctx.buzz(p, 400);
+      ctx.feel(p, 'out');
       ctx.tell(p, "You're out!", 'Cheer on the others! 📣');
       const left = ctx.players.filter((o) => !o.ball.data.out).length;
       ctx.announce(`${p.name} is out!`, left > 1 ? `${left} balls left` : null, 1400);
@@ -147,14 +147,9 @@ export default {
 
     return {
       lavaY: lava.y,
+      floorBottom: topY(LAYERS - 1) - 0.5, // underside of the BOTTOM floor, so dropping between floors never triggers slow-mo
       contenders: () => (running ? ctx.players.filter((p) => !p.ball.data.out) : []),
       start() { running = true; },
-
-      onAction(p) {
-        if (p.ball.data.out) return;
-        const i = ctx.input(p);
-        if (p.ball.dash(i.x, i.y)) ctx.audio.whoosh();
-      },
 
       update(dt) {
         for (const p of ctx.players) {

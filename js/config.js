@@ -33,9 +33,7 @@ export const CONFIG = {
     accel: 8,         // how eagerly it chases the target speed (higher = snappier)
     maxAccel: 22,     // cap on that acceleration
     airControl: 0.3,  // fraction of control while airborne
-    dashImpulse: 9,
-    dashCooldown: 1.2,
-    bonkBoost: 0.45,  // extra knockback on ball-vs-ball hits (silly physics!)
+    bonkBoost: 0.85,  // extra knockback per unit of the hitter's speed: the faster ball wins the bonk
     hitStun: 0.45,    // seconds of reduced control after a big hit, so knockback actually carries
   },
 };
