@@ -1,0 +1,25 @@
+Project/Game Name: Ball Brawl.
+
+Build a party game as a plain HTML/JS web project (Three.js + a physics lib like Rapier or cannon-es, no build step if possible), hosted on GitHub Pages (HTTPS).
+
+THE VISION
+A family-friendly party game in the spirit of Gang Beasts / Marooners / Jackbox. The TV (or any big screen/laptop) is the shared arena. Everyone joins from their own phone, and each player is a ball. You tilt your phone to roll your ball around. That's the whole control scheme, and it should feel great.
+
+HOW PLAYERS JOIN
+- The TV page shows a QR code and a short room code.
+- Players scan or type the code on their phone, pick a name and ball color, and they're in a lobby.
+- Peer-to-peer (WebRTC, e.g. PeerJS) so no custom server is needed. Use the lowest-latency channel settings possible.
+- Must work on BOTH Android and iPhone. Use the phone's tilt sensors (DeviceOrientation/DeviceMotion); remember iOS needs a user-tap permission request first. Include a quick calibration ("hold your phone how you like, tap to set neutral").
+
+THE GAMES (a collection of mini-games, each one short and easy to understand)
+- Last Ball Rolling: a battle royale on a shrinking platform, last ball standing wins
+- Ball Race: a drifty obstacle course with ramps, gaps, and hazards
+- Bump Arena: knock other balls off the edge into lava
+- Collect-a-thon: grab as many glowing orbs as you can before time runs out
+A simple lobby/menu picks the next game, tracks points across rounds, and shows a winner screen.
+
+FEEL
+Bright, funny, and chaotic, never mean or violent. Silly physics, satisfying bonks and sound effects, and little touches like ball trails, hats, and skins as unlockables later.
+
+KEEP IT FLEXIBLE
+This is a living project. Structure the code so I can easily add, remove, or change mini-games, controls, and visuals as I go. Start with the join flow and one working mini-game, then grow it from there. Don't lock in rigid plans, just keep things modular and simple.

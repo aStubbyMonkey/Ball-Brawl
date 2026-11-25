@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ball Brawl</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔴</text></svg>" />
+  <meta name="description" content="A tilt-your-phone party game. The TV is the arena, your phone is the controller." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/host.css" />
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+    }
+  }
+  </script>
+</head>
+<body class="in-lobby">
+  <div id="stage"></div>
+
+  <!-- Lobby: join card (left) + game picker (right) + players (bottom) -->
+  <aside id="join-card" class="panel lobby-only">
+    <h1 class="logo">Ball<span>Brawl</span></h1>
+    <p class="join-step">📱 Scan to join</p>
+    <div id="qr" class="qr"></div>
+    <p class="join-or">or go to <b id="join-url">…</b><br />and enter</p>
+    <div id="room-code" class="room-code">····</div>
+    <p id="net-status" class="net-status"></p>
+  </aside>
+
+  <aside id="picker" class="panel lobby-only">
+    <h2>Pick a game</h2>
+    <div id="games" class="games"></div>
+    <div class="match-row">
+      <span id="round-info"></span>
+      <label>Rounds
+        <select id="rounds">
+          <option>1</option><option>3</option><option>5</option><option>7</option><option>10</option>
+        </select>
+      </label>
+    </div>
+    <button id="start-btn" class="start-btn">Start! ▶</button>
+    <button id="kb-btn" class="kb-btn" title="Test without phones">⌨ Add keyboard player</button>
+  </aside>
+
+  <footer id="player-bar" class="lobby-only">
+    <span id="player-count" class="player-count"></span>
+    <div id="players" class="players"></div>
+  </footer>
+
+  <!-- In-game HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-top"><span id="hud-title"></span><span id="hud-timer"></span></div>
+    <div id="hud-scores" class="hud-scores"></div>
+    <div class="hud-code">Join: <b id="hud-code"></b></div>
+  </div>
+
+  <div id="announce" class="announce"></div>
+
+  <div id="intro" class="overlay hidden">
+    <div class="intro-card">
+      <div id="intro-emoji" class="intro-emoji"></div>
+      <h2 id="intro-name"></h2>
+      <p id="intro-how"></p>
+      <div id="intro-count" class="intro-count"></div>
+    </div>
+  </div>
+
+  <div id="results" class="overlay hidden">
+    <div class="results-card">
+      <h2 id="results-title"></h2>
+      <div class="rhead"><span></span><span></span><span>Player</span><span>Round</span><span>Total</span></div>
+      <div id="results-rows"></div>
+      <p id="results-footer" class="results-footer"></p>
+    </div>
+  </div>
+
+  <div id="winner" class="overlay hidden">
+    <div class="winner-card">
+      <div class="trophy">🏆</div>
+      <p class="winner-label">Champion!</p>
+      <h2 id="winner-name"></h2>
+      <div id="winner-rows" class="winner-rows"></div>
+      <p class="results-footer">Tap to play again</p>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <div id="sound-hint" class="sound-hint">🔊 Click anywhere to enable sound</div>
+
+  <script type="module" src="js/host/main.js"></script>
+</body>
+</html>

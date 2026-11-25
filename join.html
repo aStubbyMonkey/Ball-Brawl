@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1b1446" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Ball Brawl — Join</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔴</text></svg>" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/join.css" />
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+  <!-- 1. Join form -->
+  <section id="screen-join" class="screen active">
+    <h1 class="logo">Ball<span>Brawl</span></h1>
+    <label class="field" id="room-field">
+      <span>Room code</span>
+      <input id="room" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD" />
+    </label>
+    <div class="room-pill hidden" id="room-pill">Room <b id="room-pill-code"></b> <button id="room-change" class="link">change</button></div>
+    <label class="field">
+      <span>Your name</span>
+      <input id="name" maxlength="12" autocomplete="nickname" placeholder="Bouncy Bob" />
+    </label>
+    <div class="field"><span>Ball color</span><div id="colors" class="swatches"></div></div>
+    <div class="field"><span>Hat</span><div id="hats" class="hats"></div></div>
+    <button id="join-btn" class="big-btn">Join!</button>
+    <p class="error" id="join-error"></p>
+  </section>
+
+  <!-- 2. Connecting -->
+  <section id="screen-connecting" class="screen">
+    <div class="spinner"></div>
+    <p id="connecting-text">Connecting to the TV…</p>
+  </section>
+
+  <!-- 3. Calibrate -->
+  <section id="screen-calibrate" class="screen">
+    <h2>Get comfy</h2>
+    <p>Hold your phone the way you want to play: flat, tilted toward you, whatever feels good.</p>
+    <p class="small">Tilt it to roll. Keep the screen facing you.</p>
+    <button id="calibrate-btn" class="big-btn">Tap to set neutral</button>
+    <button id="use-touch-btn" class="link">No tilt? Use a touch stick instead</button>
+  </section>
+
+  <!-- 4. Play -->
+  <section id="screen-play" class="screen">
+    <div class="play-top">
+      <div class="me"><span id="me-dot" class="me-dot"></span><span id="me-name"></span></div>
+      <button id="recal-btn" class="chip">⟲ Recalibrate</button>
+    </div>
+    <div class="status">
+      <h2 id="status-title">You're in!</h2>
+      <p id="status-text">Roll around while everyone joins.</p>
+    </div>
+
+    <div id="vip" class="vip hidden">
+      <p class="vip-label">⭐ You're the VIP. Pick a game!</p>
+      <div id="vip-games" class="vip-games"></div>
+      <button id="vip-start" class="big-btn">Start!</button>
+    </div>
+
+    <div id="tilt-viz" class="tilt-viz"><div id="tilt-dot" class="tilt-dot"></div></div>
+    <div id="stick" class="stick hidden"><div id="stick-knob" class="stick-knob"></div></div>
+
+    <button id="action-btn" class="action-btn">BOOST!</button>
+    <p class="net-info" id="net-info"></p>
+  </section>
+
+  <!-- 5. Disconnected / error -->
+  <section id="screen-error" class="screen">
+    <h2>Oops!</h2>
+    <p id="error-text">Lost connection to the TV.</p>
+    <button id="retry-btn" class="big-btn">Reconnect</button>
+    <button id="back-btn" class="link">Back to start</button>
+  </section>
+
+  <script type="module" src="js/controller/main.js"></script>
+</body>
+</html>
