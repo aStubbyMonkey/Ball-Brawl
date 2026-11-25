@@ -13,6 +13,7 @@ export default {
   id: 'bump-arena',
   name: 'Bump Arena',
   emoji: '💥',
+  theme: 'volcano',
   tagline: 'Bump other balls into the lava!',
   howTo: 'Tilt to roll. Tap BOOST to dash. Knock others into the lava. Spinners and bumpers launch you! Every knockout is a point.',
   actionLabel: 'BOOST!',
@@ -24,7 +25,7 @@ export default {
     const RADIUS = Math.min(16, 12 + Math.max(0, n - 4) * 0.6);
     const s = RADIUS / 9;
     ctx.engine.setCamera({ pos: [0, 19 * s, 15 * s], look: [0, -1, 0.5 * s] });
-    const lava = makeLava(ctx, -3.5);
+    const lava = makeLava(ctx, -3.5, { area: RADIUS + 14 });
     makeDisc(ctx, RADIUS, { colors: ['#ffe8a3', '#ffb3c6'] });
 
     // Spinning bumper in the middle, a kinematic body, so physics shoves balls around.
@@ -116,6 +117,7 @@ export default {
     }
 
     return {
+      lavaY: lava.y,
       start() { running = true; },
 
       onAction(p) {
@@ -137,8 +139,9 @@ export default {
 
       update(dt) {
         // Spinner speeds up over the round.
+        // (It waits until the round really starts, a second after GO.)
         const progress = 1 - timeLeft / DURATION;
-        spinBody.angularVelocity.set(0, 0.7 + progress * 1.4, 0);
+        spinBody.angularVelocity.set(0, running ? 0.7 + progress * 1.4 : 0, 0);
 
         for (const p of ctx.players) {
           const b = p.ball, d = b.data;
@@ -163,7 +166,7 @@ export default {
 
       frame(dt) {
         lava.update(dt);
-        sync(spinner, spinBody);
+        sync(spinner, spinBody, ctx.engine);
         for (const b of bumpers) {
           b.glow = Math.max(0, b.glow - dt * 3);
           b.mat.emissive.setRGB(b.glow, b.glow * 0.8, b.glow * 0.3);

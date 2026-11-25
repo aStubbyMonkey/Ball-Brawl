@@ -1,6 +1,6 @@
 // Phone controller: join form -> connect -> calibrate -> play.
 import { CONFIG } from '../config.js';
-import { COLORS, HATS } from '../shared/cosmetics.js';
+import { COLORS, CATALOG, DEFAULT_LOOK, validItem, itemName } from '../cosmetics/catalog.js';
 import { ClientNet } from '../net/clientNet.js';
 import { Tilt, TouchStick } from './tilt.js';
 
@@ -14,7 +14,10 @@ const state = {
   room: (new URLSearchParams(location.search).get('room') || '').toUpperCase().slice(0, 4),
   name: store.get('name', ''),
   color: store.get('color', COLORS[Math.floor(Math.random() * COLORS.length)]),
-  hat: store.get('hat', 'party'),
+  hat: validItem('hat', store.get('hat', DEFAULT_LOOK.hat)),
+  eyes: validItem('eyes', store.get('eyes', DEFAULT_LOOK.eyes)),
+  outfit: validItem('outfit', store.get('outfit', DEFAULT_LOOK.outfit)),
+  skin: validItem('skin', store.get('skin', DEFAULT_LOOK.skin)),
   clientId: store.get('client-id', null),
   useTouch: false,
   tiltOk: false,
@@ -34,6 +37,8 @@ const net = new ClientNet({ onMessage, onClose });
 // ---------- screens ----------
 function show(id) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
+  // The 3D preview only runs while you're on the join screen (saves battery while playing).
+  if (id === 'screen-join') preview?.resume(); else preview?.pause();
 }
 
 // ---------- join form ----------
@@ -51,20 +56,54 @@ function renderForm() {
     b.className = 'swatch' + (c === state.color ? ' sel' : '');
     b.style.background = c;
     b.ariaLabel = 'color ' + c;
-    b.onclick = () => { state.color = c; renderForm(); };
+    b.onclick = () => { state.color = c; renderForm(); updatePreview(); };
     $('colors').appendChild(b);
   }
-  $('hats').innerHTML = '';
-  for (const h of HATS) {
-    if (h.locked) continue;
-    const b = document.createElement('button');
-    b.className = 'hat' + (h.id === state.hat ? ' sel' : '');
-    b.textContent = h.emoji;
-    b.title = h.name;
-    b.onclick = () => { state.hat = h.id; renderForm(); };
-    $('hats').appendChild(b);
-  }
+  renderLookText();
 }
+
+// ---------- character customizer ----------
+const look = () => ({ color: state.color, hat: state.hat, eyes: state.eyes, outfit: state.outfit, skin: state.skin });
+let preview = null;
+// Loaded lazily so the join form still works if 3D isn't available.
+import('./preview.js')
+  .then((m) => { preview = m.createPreview($('preview'), look()); })
+  .catch((e) => { console.warn('3D preview unavailable', e); $('wardrobe').classList.add('no-3d'); });
+function updatePreview() { preview?.set(look()); }
+
+function renderLookText() {
+  $('skin-name').textContent = itemName('skin', state.skin);
+  $('look-summary').textContent = [itemName('hat', state.hat), itemName('eyes', state.eyes), itemName('outfit', state.outfit)].join(' · ');
+}
+
+let popT = null;
+function cycle(kind, dir) {
+  const list = CATALOG[kind].filter((x) => !x.locked);
+  const i = list.findIndex((x) => x.id === state[kind]);
+  const next = list[(i + dir + list.length) % list.length];
+  state[kind] = next.id;
+  renderLookText();
+  updatePreview();
+  buzz(8);
+  // Show the item's name next to the row you tapped.
+  const pop = $('pop-name');
+  const row = document.querySelector(`.arrow-row[data-kind="${kind}"]`);
+  pop.textContent = `${next.name}  ${list.indexOf(next) + 1}/${list.length}`;
+  pop.style.top = row ? row.style.top : '90%';
+  pop.classList.remove('show'); void pop.offsetWidth; pop.classList.add('show');
+  clearTimeout(popT); popT = setTimeout(() => pop.classList.remove('show'), 1300);
+}
+document.querySelectorAll('.arrow-row').forEach((row) => {
+  row.querySelectorAll('.arrow').forEach((b) => { b.onclick = () => cycle(row.dataset.kind, +b.dataset.dir); });
+});
+$('skin-prev').onclick = () => cycle('skin', -1);
+$('skin-next').onclick = () => cycle('skin', 1);
+$('shuffle-btn').onclick = () => {
+  const pickFrom = (k) => { const l = CATALOG[k].filter((x) => !x.locked); return l[Math.floor(Math.random() * l.length)].id; };
+  state.hat = pickFrom('hat'); state.eyes = pickFrom('eyes'); state.outfit = pickFrom('outfit'); state.skin = pickFrom('skin');
+  state.color = COLORS[Math.floor(Math.random() * COLORS.length)];
+  renderForm(); updatePreview(); buzz(20);
+};
 $('room-change').onclick = () => { state.room = ''; renderForm(); $('room').focus(); };
 $('room').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, ''); });
 
@@ -74,7 +113,8 @@ $('join-btn').onclick = () => {
   state.name = $('name').value.trim().slice(0, 12) || 'Ball ' + Math.floor(Math.random() * 90 + 10);
   if (state.room.length !== 4) { $('join-error').textContent = 'Enter the 4-letter code from the TV.'; return; }
   $('join-error').textContent = '';
-  store.set('name', state.name); store.set('color', state.color); store.set('hat', state.hat);
+  store.set('name', state.name); store.set('color', state.color);
+  for (const k of ['hat', 'eyes', 'outfit', 'skin']) store.set(k, state[k]);
 
   // All of these need the tap's "user gesture", so call them right here, before any await.
   const perm = Tilt.requestPermission();
@@ -97,7 +137,8 @@ async function connect(firstTime) {
   $('connecting-text').textContent = `Connecting to room ${state.room}…`;
   try {
     await net.connect(state.room, {
-      t: 'hello', clientId: state.clientId, name: state.name, color: state.color, hat: state.hat,
+      t: 'hello', clientId: state.clientId, name: state.name, color: state.color,
+      hat: state.hat, eyes: state.eyes, outfit: state.outfit, skin: state.skin,
     });
   } catch (err) {
     showError(err.message);

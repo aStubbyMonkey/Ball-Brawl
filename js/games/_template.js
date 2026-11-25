@@ -17,6 +17,11 @@
 //   ctx.setTimer(seconds|null)   HUD timer
 //   ctx.setScores([{player, value, out}] | null)   HUD scoreboard for this round
 //   ctx.end(groups)   finish the round. groups = [[1st place players], [2nd], ...]
+//   ctx.dramatic(p)   slow-mo close-up on a player right now (e.g. about to cross the finish line)
+//
+// Set `theme` below for the sky and scenery ('meadow', 'volcano', 'candy', 'skytower'; see games/env.js).
+// The round starts in stages: during the countdown balls are frozen; at GO they can roll; one second
+// later start() is called. Start your hazards and timers in start() so players get a beat to move first.
 //
 // The main loop applies tilt to every active ball for you (tweak p.ball.tuning to change feel).
 import * as THREE from 'three';
@@ -26,6 +31,7 @@ export default {
   id: 'my-game',
   name: 'My Game',
   emoji: '🎈',
+  theme: 'meadow',
   tagline: 'One line shown in the picker',
   howTo: 'Shown on the phones and TV during the countdown.',
   actionLabel: 'BOOST!', // phone button text, or null to hide it
@@ -44,7 +50,10 @@ export default {
     let timeLeft = 30, running = false;
 
     return {
-      start() { running = true; },                  // countdown finished
+      // Optional: lets the TV predict a deciding fall into lava and play it in slow-mo.
+      // contenders: () => ctx.players.filter((p) => !p.ball.data.out),
+      // lavaY: lava.y,
+      start() { running = true; },                  // a second after GO
       update(dt) {                                  // fixed 60Hz step
         if (!running) return;
         timeLeft -= dt;

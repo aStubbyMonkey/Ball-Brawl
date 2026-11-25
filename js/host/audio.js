@@ -88,6 +88,12 @@ export class Sfx {
     this._tone({ type: 'sine', f0: 180, f1: 520, dur: 0.35, vol: 0.4 });
     this._tone({ type: 'triangle', f0: 360, f1: 900, dur: 0.25, vol: 0.15, delay: 0.03 });
   }
+  /** Time slowing down: a deep downward 'vwoooom' + heartbeat. */
+  slowmo() {
+    this._tone({ type: 'sawtooth', f0: 320, f1: 55, dur: 0.9, vol: 0.12, attack: 0.05 });
+    this._noiseHit({ dur: 0.8, vol: 0.25, freq: 1800, q: 1, sweepTo: 150 });
+    for (const d of [0.25, 0.55]) this._tone({ type: 'sine', f0: 70, f1: 40, dur: 0.18, vol: 0.5, delay: d });
+  }
   whoosh() { this._noiseHit({ dur: 0.25, vol: 0.3, freq: 400, q: 2, sweepTo: 2500 }); }
   pop() { this._tone({ type: 'sine', f0: 400, f1: 1200, dur: 0.12, vol: 0.35 }); }
   pickup() {

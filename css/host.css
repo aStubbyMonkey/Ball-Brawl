@@ -122,12 +122,35 @@ body.celebrating .hud-scores { display: none; }
   background: #fff; border-radius: 32px; padding: 32px 48px; text-align: center; max-width: 760px;
   box-shadow: 0 14px 0 #0003; animation: popin .4s cubic-bezier(.3, 1.6, .5, 1);
 }
-.intro-emoji { font-size: 80px; line-height: 1; }
-.intro-card h2 { font-size: 56px; margin: 8px 0; color: var(--purple); }
-.intro-card p { font-size: 24px; margin: 0 0 12px; color: #4a4380; }
-.intro-count { font-size: 120px; font-weight: 700; color: var(--hot); line-height: 1.1; min-height: 1.1em; }
-.intro-count.tick { animation: tick .5s cubic-bezier(.3, 1.8, .5, 1); }
-@keyframes tick { from { transform: scale(2.2); opacity: 0; } }
+/* Round intro: slim banner at the bottom, arena stays visible. */
+.intro { position: fixed; left: 0; right: 0; bottom: 3vh; display: flex; justify-content: center; pointer-events: none; }
+.intro-banner {
+  display: flex; align-items: center; gap: 18px; max-width: min(980px, 86vw);
+  background: rgba(255, 255, 255, 0.93); border-radius: 26px; padding: 14px 28px 14px 20px;
+  box-shadow: 0 10px 0 #0002, 0 18px 40px #0002; animation: rise .5s cubic-bezier(.3, 1.5, .5, 1);
+}
+.intro.leaving .intro-banner { animation: sink .45s ease-in forwards; }
+@keyframes rise { from { transform: translateY(140%); } }
+@keyframes sink { to { transform: translateY(160%); opacity: 0; } }
+.intro-emoji { font-size: 58px; line-height: 1; }
+.intro-text h2 { font-size: 36px; margin: 0; color: var(--purple); }
+.intro-text p { font-size: 20px; margin: 2px 0 0; color: #4a4380; line-height: 1.3; }
+
+/* 3-2-1-GO: just big outlined text, no box. Fades itself out. */
+.countdown {
+  position: fixed; left: 0; right: 0; top: 30vh; text-align: center; pointer-events: none;
+  font-size: 170px; font-weight: 700; line-height: 1; color: #fff; opacity: 0;
+  -webkit-text-stroke: 6px var(--ink); paint-order: stroke fill; text-shadow: 0 10px 0 var(--ink);
+}
+.countdown.go { color: var(--accent); font-size: 200px; }
+.countdown.tick { animation: count .75s cubic-bezier(.3, 1.6, .5, 1) forwards; }
+.countdown.go.tick { animation: count 1s cubic-bezier(.3, 1.6, .5, 1) forwards; }
+@keyframes count {
+  0% { transform: scale(2.4); opacity: 0; }
+  25% { transform: scale(1); opacity: 1; }
+  70% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.85) translateY(-20px); opacity: 0; }
+}
 
 .results-card { min-width: 560px; }
 .results-card h2 { font-size: 40px; margin: 0 0 14px; }

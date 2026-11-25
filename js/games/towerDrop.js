@@ -4,7 +4,7 @@
 // The camera zooms in and out to keep every ball in view.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeLava, ringSpawns } from './helpers.js';
+import { makeLava, ringSpawns, tileGeometry, tileTexture } from './helpers.js';
 
 const TILE = 1.6;
 const GAP = 0.06;
@@ -21,6 +21,7 @@ export default {
   id: 'tower-drop',
   name: 'Tower Drop',
   emoji: '🏗️',
+  theme: 'skytower',
   tagline: 'Floors vanish under you. Drop, drop, drop!',
   howTo: 'Tilt to roll. Every tile you touch falls away, so keep moving! Drop through the holes to the floor below. Fall off the last floor and you are out. Last ball standing wins!',
   actionLabel: 'BOOST!',
@@ -30,10 +31,11 @@ export default {
     const n = ctx.players.length;
     const RADIUS = Math.min(10.5, 6.5 + n * 0.45);
     const topY = (layer) => (LAYERS - 1 - layer) * SPACING; // layer 0 = top floor
-    const lava = makeLava(ctx, -4);
+    const lava = makeLava(ctx, -4, { area: RADIUS + 14 });
 
     // ---- build the floors ----
-    const geo = new THREE.BoxGeometry(TILE - GAP, 0.5, TILE - GAP);
+    const geo = tileGeometry(TILE - GAP, 0.5);
+    const map = tileTexture();
     const tiles = new Map(); // "layer:i:j" -> tile
     const layerTiles = [...Array(LAYERS)].map(() => []);
     const cells = Math.ceil(RADIUS / TILE);
@@ -44,7 +46,7 @@ export default {
         const x = i * TILE, z = j * TILE;
         if (Math.hypot(x, z) > r) continue;
         const color = new THREE.Color(LAYER_COLORS[L % LAYER_COLORS.length][(i + j + 100) % 2]);
-        const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, transparent: true });
+        const mat = new THREE.MeshStandardMaterial({ color, map, roughness: 0.5, transparent: true });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(x, y - 0.25, z);
         mesh.castShadow = true; mesh.receiveShadow = true;
@@ -68,7 +70,7 @@ export default {
     // Camera frames all balls that are still in, zooming as they spread out or drop.
     const alivePositions = () => ctx.players.filter((p) => p.ball.active && !p.ball.data.out).map((p) => p.ball.position);
     ctx.engine.setCamera({ pos: [0, topY(0) + 22, 18], look: [0, topY(0), 0], instant: true });
-    ctx.engine.follow(alivePositions, { min: 13, max: 34, pad: 3, dir: [0, 0.8, 0.6], speed: 0.25 });
+    ctx.engine.follow(alivePositions, { min: 13, max: 34, pad: 3, dir: [0, 0.8, 0.6], smooth: 0.8 });
 
     const solo = n === 1;
     let running = false, finished = false, elapsed = 0;
@@ -121,26 +123,31 @@ export default {
       ctx.end(groups);
     }
 
-    let lastFade = -1;
+    let lastFade = '';
+    const floorOf = (y) => Math.max(0, Math.min(LAYERS - 1, Math.floor((topY(0) - y + 1.5) / SPACING)));
     function fadeUpperFloors() {
-      // Floors above the highest ball turn see-through so you can watch the action below.
+      // So you can always see everyone: floors above every ball almost vanish, and floors
+      // with someone underneath them turn see-through.
       const ys = alivePositions().map((p) => p.y);
-      const highest = ys.length ? Math.max(...ys) : topY(0);
-      const firstVisible = Math.max(0, Math.min(LAYERS - 1, Math.floor((topY(0) - highest + 1.5) / SPACING)));
-      if (firstVisible === lastFade) return;
-      lastFade = firstVisible;
+      const top = ys.length ? floorOf(Math.max(...ys)) : 0;      // highest ball's floor
+      const bottom = ys.length ? floorOf(Math.min(...ys)) : 0;   // lowest ball's floor
+      const key = top + ':' + bottom;
+      if (key === lastFade) return;
+      lastFade = key;
       for (let L = 0; L < LAYERS; L++) {
-        const faded = L < firstVisible;
+        const opacity = L < top ? 0.1 : L < bottom ? 0.4 : 1;
         for (const t of layerTiles[L]) {
           if (t.state === 'falling' || t.state === 'gone') continue;
-          t.mat.opacity = faded ? 0.12 : 1;
-          t.mat.depthWrite = !faded;
-          t.mesh.castShadow = !faded;
+          t.mat.opacity = opacity;
+          t.mat.depthWrite = opacity === 1;
+          t.mesh.castShadow = opacity === 1;
         }
       }
     }
 
     return {
+      lavaY: lava.y,
+      contenders: () => (running ? ctx.players.filter((p) => !p.ball.data.out) : []),
       start() { running = true; },
 
       onAction(p) {

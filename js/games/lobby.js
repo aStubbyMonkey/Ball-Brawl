@@ -7,13 +7,14 @@ export default {
   id: 'lobby',
   name: 'Lobby',
   hidden: true, // not shown in the game picker
+  theme: 'meadow',
   actionLabel: 'BOOST!',
   howTo: 'Roll around while everyone joins!',
 
   create(ctx) {
     const R = 11;
     ctx.engine.setCamera({ pos: [0, 17, 17], look: [0, 0, 1] });
-    makeDisc(ctx, R, { colors: ['#c7f9cc', '#80ed99'] });
+    makeDisc(ctx, R, { colors: ['#c7f9cc', '#80ed99'], rim: '#ff6b9d' });
 
     // Bumper rim so nobody falls out of the lobby.
     const rimMat = new THREE.MeshStandardMaterial({ color: '#ff6b9d', roughness: 0.4 });
@@ -51,7 +52,7 @@ export default {
         for (const p of ctx.players) if (p.ball.active && p.ball.position.y < -6) { drop(p); ctx.fx.poof(p.ball.position); }
         if (beachBody.position.y < -6) { beachBody.position.set(0, 5, 0); beachBody.velocity.setZero(); }
       },
-      frame() { sync(beach, beachBody); },
+      frame() { sync(beach, beachBody, ctx.engine); },
     };
   },
 };

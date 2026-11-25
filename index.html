@@ -15,6 +15,7 @@
   {
     "imports": {
       "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
       "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
     }
   }
@@ -62,14 +63,17 @@
 
   <div id="announce" class="announce"></div>
 
-  <div id="intro" class="overlay hidden">
-    <div class="intro-card">
+  <!-- Round intro: a slim banner at the bottom so the arena and players stay visible -->
+  <div id="intro" class="intro hidden">
+    <div class="intro-banner">
       <div id="intro-emoji" class="intro-emoji"></div>
-      <h2 id="intro-name"></h2>
-      <p id="intro-how"></p>
-      <div id="intro-count" class="intro-count"></div>
+      <div class="intro-text">
+        <h2 id="intro-name"></h2>
+        <p id="intro-how"></p>
+      </div>
     </div>
   </div>
+  <div id="countdown" class="countdown"></div>
 
   <div id="results" class="overlay hidden">
     <div class="results-card">

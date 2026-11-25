@@ -3,20 +3,18 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { CONFIG } from '../config.js';
-import { buildHat } from './hats.js';
+import { Avatar } from '../cosmetics/avatar.js';
 
-const SPHERE_GEO = new THREE.SphereGeometry(1, 32, 24);
-const EYE_GEO = new THREE.SphereGeometry(1, 16, 12);
-const EYE_WHITE = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
-const PUPIL = new THREE.MeshBasicMaterial({ color: 0x111111 });
+const TRAIL_GEO = new THREE.SphereGeometry(1, 12, 8);
 const TRAIL_N = 16;
+const _p = new THREE.Vector3();
 const _axis = new THREE.Vector3();
 const _dq = new THREE.Quaternion();
 
 export class Ball {
   /**
    * @param engine Engine
-   * @param player { id, name, color, hat }
+   * @param player { id, name, color, skin, hat, eyes, outfit }
    * @param onHit (ball, otherBody, impact, normal) => void   normal points from this ball to the other
    */
   constructor(engine, player, onHit) {
@@ -55,32 +53,18 @@ export class Ball {
 
     // --- visuals ---
     const color = new THREE.Color(player.color);
-    this.material = new THREE.MeshStandardMaterial({ map: ballTexture(player.color), roughness: 0.35, metalness: 0.05 });
-    this.mesh = new THREE.Mesh(SPHERE_GEO, this.material);
+    this.avatar = new Avatar(player, { anisotropy: engine.renderer.capabilities.getMaxAnisotropy() });
+    this.mesh = this.avatar.body;   // rolls
     this.mesh.scale.setScalar(R);
-    this.mesh.castShadow = true;
-
-    this.face = new THREE.Group(); // doesn't roll; turns to face movement
-    const eye = (side) => {
-      const g = new THREE.Group();
-      const w = new THREE.Mesh(EYE_GEO, EYE_WHITE); w.scale.setScalar(0.15);
-      const p = new THREE.Mesh(EYE_GEO, PUPIL); p.scale.setScalar(0.075); p.position.z = 0.1;
-      g.add(w, p);
-      g.position.set(side * 0.17, 0.16, 0.38);
-      g.userData.pupil = p;
-      return g;
-    };
-    this.eyes = [eye(-1), eye(1)];
-    this.face.add(...this.eyes);
-    this.hat = null;
-    this.setHat(player.hat);
+    this.face = this.avatar.face;   // doesn't roll; turns to face movement
+    this.face.scale.setScalar(R / 0.5);
 
     this.label = makeLabel(player.name, player.color);
 
     this.trailMat = new THREE.MeshBasicMaterial({ color: color.clone().lerp(new THREE.Color(0xffffff), 0.35), transparent: true, opacity: 0.55 });
     this.trail = [];
     for (let i = 0; i < TRAIL_N; i++) {
-      const m = new THREE.Mesh(EYE_GEO, this.trailMat);
+      const m = new THREE.Mesh(TRAIL_GEO, this.trailMat);
       m.visible = false; m.userData.life = 0;
       this.trail.push(m);
     }
@@ -92,11 +76,8 @@ export class Ball {
     engine.scene.add(this.root);
   }
 
-  setHat(id) {
-    if (this.hat) this.face.remove(this.hat);
-    this.hat = buildHat(id);
-    if (this.hat) { this.hat.position.y = this.radius * 0.82; this.face.add(this.hat); }
-  }
+  /** Change any of { color, skin, hat, eyes, outfit }. */
+  setLook(look) { this.avatar.set(look); }
 
   setName(name, color) {
     this.root.remove(this.label);
@@ -110,6 +91,7 @@ export class Ball {
     b.position.set(pos[0], pos[1], pos[2]);
     b.velocity.setZero(); b.angularVelocity.setZero();
     b.quaternion.set(0, 0, 0, 1);
+    b._prev?.copy(b.position); // no interpolation streak from the old spot
     if (!this.active) this.engine.world.addBody(b);
     this.active = true;
     this.yaw = yaw;
@@ -185,11 +167,14 @@ export class Ball {
   /** Visual squash-and-stretch kick. */
   poke(amount) { this.squashVel += amount * 12; }
 
+  /** Smoothed render position (interpolated between physics steps, so slow-mo stays silky). */
+  get renderPosition() { return this.engine.lerpPos(this.body, _p); }
+
   sync() {
-    const p = this.body.position;
-    this.mesh.position.set(p.x, p.y, p.z);
+    const p = this.engine.lerpPos(this.body, _p);
+    this.mesh.position.copy(p);
     this.mesh.quaternion.copy(this.rollQ);
-    this.face.position.set(p.x, p.y, p.z);
+    this.face.position.copy(p);
     this.label.position.set(p.x, p.y + this.radius + 0.95, p.z);
   }
 
@@ -220,17 +205,9 @@ export class Ball {
     this.squash += this.squashVel * dt;
     const s = Math.max(-0.4, Math.min(0.4, this.squash));
     this.mesh.scale.set(this.radius * (1 + s * 0.5), this.radius * (1 - s), this.radius * (1 + s * 0.5));
-    this.face.scale.set(1 + s * 0.5, 1 - s, 1 + s * 0.5);
-
-    // Blink + pupils wobble with speed.
-    this.blink -= dt;
-    const closed = this.blink < 0.12;
-    if (this.blink < 0) this.blink = 2 + Math.random() * 4;
-    for (const e of this.eyes) {
-      e.scale.y = closed ? 0.15 : 1;
-      e.userData.pupil.position.x = Math.sin(this.engine.time * 9) * Math.min(0.04, speed * 0.004);
-    }
-    if (this.hat?.userData.spin) this.hat.userData.spin.rotation.y += dt * (6 + speed * 2);
+    const fs = this.radius / 0.5;
+    this.face.scale.set(fs * (1 + s * 0.5), fs * (1 - s), fs * (1 + s * 0.5));
+    this.avatar.update(dt, speed); // blink, pupils, propellers, capes...
 
     // Trail.
     this._trailT -= dt;
@@ -251,43 +228,31 @@ export class Ball {
   dispose() {
     this.deactivate();
     this.engine.scene.remove(this.root);
-    this.material.map.dispose(); this.material.dispose();
+    this.avatar.dispose();
     this.trailMat.dispose();
     this.label.material.map.dispose(); this.label.material.dispose();
   }
 }
 
-function ballTexture(hex) {
-  const c = document.createElement('canvas');
-  c.width = 256; c.height = 128;
-  const g = c.getContext('2d');
-  g.fillStyle = hex; g.fillRect(0, 0, 256, 128);
-  // A lighter belt + polka dots so you can actually see it roll.
-  const light = new THREE.Color(hex).lerp(new THREE.Color(0xffffff), 0.55).getStyle();
-  g.fillStyle = light; g.fillRect(0, 56, 256, 16);
-  g.fillStyle = '#ffffffcc';
-  const dots = [[30, 25], [95, 30], [160, 22], [225, 28], [60, 100], [128, 104], [195, 98]];
-  for (const [x, y] of dots) { g.beginPath(); g.arc(x, y, 11, 0, Math.PI * 2); g.fill(); }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
 function makeLabel(text, color) {
+  // Canvas is sized to the text, so long names never get clipped.
+  const font = '700 64px Fredoka, system-ui, sans-serif';
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.font = font;
+  const w = Math.ceil(probe.measureText(text).width + 64);
   const c = document.createElement('canvas');
-  c.width = 512; c.height = 128;
+  c.width = w + 16; c.height = 128;
   const g = c.getContext('2d');
-  g.font = '700 64px Fredoka, system-ui, sans-serif';
-  const w = Math.min(500, g.measureText(text).width + 56);
+  g.font = font;
   g.fillStyle = 'rgba(20,14,60,0.72)';
-  roundRect(g, 256 - w / 2, 18, w, 92, 46); g.fill();
+  roundRect(g, 8, 18, w, 92, 46); g.fill();
   g.lineWidth = 8; g.strokeStyle = color; g.stroke();
   g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(text, 256, 66);
+  g.fillText(text, c.width / 2, 66);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false }));
-  s.scale.set(2.4, 0.6, 1);
+  s.scale.set(0.6 * (c.width / 128), 0.6, 1);
   s.renderOrder = 10;
   return s;
 }

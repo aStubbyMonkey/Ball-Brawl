@@ -6,7 +6,8 @@ It's plain HTML/JS with no build step: Three.js for rendering, cannon-es for phy
 ## Play
 
 1. Open `index.html` on the big screen (your GitHub Pages URL).
-2. Players scan the QR code (or open `join.html` and type the room code), then pick a name, color and hat.
+2. Players scan the QR code (or open `join.html` and type the room code), pick a name and color, then dress up
+   their ball with the arrows next to its hat, eyes and body (plus a pattern). Drag the ball to spin it.
 3. Players tap **Join**, which also asks for tilt permission on iPhone, then hold the phone comfortably and tap to set neutral.
 4. The VIP (first phone to join, marked ⭐) or the TV picks a game and hits **Start**.
 
@@ -27,16 +28,22 @@ touch stick. For real tilt testing, use the Pages URL or an HTTPS tunnel.
 ```
 index.html / join.html     TV page / phone page
 js/config.js               all tunables (ball feel, points, rounds, network)
-js/shared/cosmetics.js     colors + hats catalog (phone and TV)
+js/cosmetics/catalog.js    colors, hats, eyes, outfits, patterns (the list both phone and TV use)
+js/cosmetics/parts.js      3D builders for every hat / eyes / outfit
+js/cosmetics/skins.js      ball patterns (painted textures)
+js/cosmetics/avatar.js     a dressed-up ball (used by the TV and the phone preview)
 js/net/                    PeerJS wrappers: hostNet (TV), clientNet (phone), protocol (message shapes)
-js/controller/             phone: tilt.js (sensor → stick, calibration, touch fallback), main.js (screens)
+js/controller/             phone: tilt.js (sensor → stick, calibration, touch fallback), main.js (screens),
+                           preview.js (3D character preview on the join screen)
 js/host/main.js            TV state machine: lobby → intro → playing → results → winner
 js/host/engine.js          Three.js scene, cannon world, fixed-step loop, camera, level containers
 js/host/ball.js            player ball: physics, rolling mesh, googly eyes, hat, label, trail, dash
-js/host/{fx,audio,ui,hats,keyboard}.js   particles, synth SFX, DOM overlays, hat models, test keyboard input
+js/host/{fx,audio,ui,keyboard}.js   particles, synth SFX, DOM overlays, test keyboard input
 js/games/index.js          ← the game list (add/remove games here)
 js/games/_template.js      ← copy this to make a new mini-game (documents the whole ctx API)
-js/games/helpers.js        lava, platforms, boxes, spawn rings, ranking helpers
+js/games/helpers.js        platforms, tiles, boxes, spawn rings, ranking helpers
+js/games/lava.js           the animated lava sea (shader, embers, bubbles)
+js/games/env.js            level themes: sky, clouds, birds, wind streaks, floating motes, scenery
 js/games/lobby.js          the lobby is just a mini-game that never ends
 js/games/bumpArena.js      knock others into lava, most KOs wins
 js/games/lastBallRolling.js  crumbling tile floor, last ball standing
@@ -60,6 +67,14 @@ Closing the TV tab ends the room for everyone, since nothing runs on a server.
 Main applies tilt to every ball automatically. Change the feel per game with `p.ball.tuning.maxSpeed`, `.accel`, etc.
 Want a bumper that launches balls? Give any physics body a `bounce` value (e.g. `body.bounce = 12`).
 `ctx.engine.follow(() => positions)` makes the camera auto-frame a set of balls.
+Pick a look with `theme: 'meadow' | 'volcano' | 'candy' | 'skytower'` (or add one in `env.js`).
+
+**Slow-mo finishes:** return `contenders()` (players still in) and `lavaY` from `create()`, and when a fall
+would decide the round, the TV predicts it, slows time, zooms in on the faller, then swings to the winner.
+For races, call `ctx.dramatic(player)` when someone is about to cross the line.
+
+**Adding a cosmetic:** add `{ id, name }` to the list in `js/cosmetics/catalog.js`, then a builder with the same
+id in `js/cosmetics/parts.js` (or a painter in `skins.js` for a pattern).
 
 ### Networking notes
 
@@ -69,8 +84,12 @@ Want a bumper that launches balls? Give any physics body a `bounce` value (e.g. 
 - Phones reconnect with a stored client id, so a dropped player keeps their score.
 - Strict networks (some corporate/school Wi-Fi) may need a TURN server: add it under `CONFIG.peerOptions.config.iceServers`.
 
+## Screenshots
+
+`screenshots/` has sheets of every hat, eyes, outfit and pattern. They aren't used by the game, so you don't need to upload them.
+
 ## Ideas / TODO
 
 - Ball Race (drifty obstacle course), Collect-a-thon (glowing orbs)
-- Unlockable hats/skins (`locked` flag already exists in `cosmetics.js`)
+- Unlockable hats/skins (`locked` flag already exists in `js/cosmetics/catalog.js`)
 - Music, per-game camera follow, team modes

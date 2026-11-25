@@ -101,14 +101,23 @@ export class HostUI {
     $('intro-emoji').textContent = def.emoji || '🎮';
     $('intro-name').textContent = def.name;
     $('intro-how').textContent = def.howTo || '';
-    $('intro').classList.remove('hidden');
+    const el = $('intro');
+    el.classList.remove('hidden', 'leaving');
   }
-  setCountdown(n) {
-    const el = $('intro-count');
-    el.textContent = n;
+  /** Big number in the middle of the screen. It animates in and fades out by itself. */
+  countdown(text, go = false) {
+    const el = $('countdown');
+    el.textContent = text;
+    el.classList.toggle('go', go);
     el.classList.remove('tick'); void el.offsetWidth; el.classList.add('tick');
   }
-  hideIntro() { $('intro').classList.add('hidden'); }
+  hideIntro() {
+    const el = $('intro');
+    if (el.classList.contains('hidden')) return;
+    el.classList.add('leaving');
+    clearTimeout(this._introT);
+    this._introT = setTimeout(() => el.classList.add('hidden'), 450);
+  }
 
   showResults(title, rows, footer) {
     $('results-title').textContent = title;

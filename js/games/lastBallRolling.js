@@ -2,7 +2,7 @@
 // Last ball standing wins.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeLava, ringSpawns } from './helpers.js';
+import { makeLava, ringSpawns, tileGeometry, tileTexture } from './helpers.js';
 
 const TILE = 1.6;
 const GAP = 0.06;
@@ -13,6 +13,7 @@ export default {
   id: 'last-ball-rolling',
   name: 'Last Ball Rolling',
   emoji: '👑',
+  theme: 'candy',
   tagline: 'The floor is crumbling. Be the last ball standing!',
   howTo: 'Tilt to roll. The floor falls away from the edges. Flashing tiles are about to drop. Last one on wins!',
   actionLabel: 'BOOST!',
@@ -22,10 +23,11 @@ export default {
     const START_RADIUS = Math.min(12.5, 9.5 + Math.max(0, ctx.players.length - 4) * 0.45);
     const cs = START_RADIUS / 9.5;
     ctx.engine.setCamera({ pos: [0, 20 * cs, 15 * cs], look: [0, -1, 0.5] });
-    const lava = makeLava(ctx, -3.5);
+    const lava = makeLava(ctx, -3.5, { area: START_RADIUS + 14 });
 
     // Build a circle of square tiles.
-    const geo = new THREE.BoxGeometry(TILE - GAP, 0.6, TILE - GAP);
+    const geo = tileGeometry(TILE - GAP, 0.6);
+    const map = tileTexture();
     const palette = ['#ffd6a5', '#fdffb6', '#caffbf', '#9bf6ff', '#a0c4ff', '#bdb2ff', '#ffc6ff'];
     const tiles = [];
     const n = Math.ceil(START_RADIUS / TILE);
@@ -33,7 +35,7 @@ export default {
       const x = i * TILE, z = j * TILE, d = Math.hypot(x, z);
       if (d > START_RADIUS) continue;
       const color = new THREE.Color(palette[(i + j + 100) % palette.length]);
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
+      const mat = new THREE.MeshStandardMaterial({ color, map, roughness: 0.5 });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x, -0.3, z);
       mesh.receiveShadow = true; mesh.castShadow = true;
@@ -58,7 +60,7 @@ export default {
     let running = false;
     let finished = false;
     let elapsed = 0;
-    let dropTimer = 3; // grace period
+    let dropTimer = 0.4; // first tiles start flashing right after the round begins
     const outOrder = []; // first eliminated first
     const scores = () => ctx.setScores(ctx.players.map((p) => ({ player: p, value: p.ball.data.out ? '💧' : '😀', out: p.ball.data.out })));
     scores();
@@ -105,6 +107,9 @@ export default {
     }
 
     return {
+      lavaY: lava.y,
+      // Balls still in the running (the slow-mo director watches these for a deciding fall).
+      contenders: () => (running ? ctx.players.filter((p) => !p.ball.data.out) : []),
       start() { running = true; },
 
       onAction(p) {

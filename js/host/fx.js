@@ -26,7 +26,7 @@ export class Fx {
   _mat(color, double) {
     const key = color + (double ? 'd' : '');
     if (!this.mats.has(key)) {
-      this.mats.set(key, new THREE.MeshBasicMaterial({ color, side: double ? THREE.DoubleSide : THREE.FrontSide, transparent: true }));
+      this.mats.set(key, new THREE.MeshBasicMaterial({ color, side: double ? THREE.DoubleSide : THREE.FrontSide, transparent: true, fog: false }));
     }
     return this.mats.get(key);
   }
@@ -97,19 +97,32 @@ export class Fx {
 
   popText(pos, text, color = '#ffd60a', size = 1) {
     text = text || pick(WORDS.bonk);
+    // Size the canvas to the text, so long words ("HOT HOT HOT!") never get cut off.
+    const font = '700 112px Fredoka, Impact, sans-serif';
+    const probe = (this._probe ||= document.createElement('canvas').getContext('2d'));
+    probe.font = font;
+    const H = 176, w = Math.ceil(probe.measureText(text).width + 60);
     const c = document.createElement('canvas');
-    c.width = 256; c.height = 128;
+    c.width = w; c.height = H;
     const g = c.getContext('2d');
-    g.font = `700 ${text.length > 8 ? 52 : 72}px Fredoka, Impact, sans-serif`;
+    g.font = font;
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.lineWidth = 14; g.strokeStyle = '#1b1446'; g.strokeText(text, 128, 64);
-    g.fillStyle = color; g.fillText(text, 128, 64);
+    g.lineJoin = 'round';
+    g.lineWidth = 22; g.strokeStyle = '#1b1446'; g.strokeText(text, w / 2, H / 2 + 6);
+    g.fillStyle = color; g.fillText(text, w / 2, H / 2);
+    // A little highlight on the top half for a shiny comic look.
+    g.save(); g.globalCompositeOperation = 'source-atop';
+    const hl = g.createLinearGradient(0, H * 0.2, 0, H * 0.55);
+    hl.addColorStop(0, 'rgba(255,255,255,0.45)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = hl; g.fillRect(0, 0, w, H * 0.55);
+    g.restore();
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, fog: false }));
     s.position.set(pos.x, pos.y + 1, pos.z);
     s.renderOrder = 20;
-    s.userData = { life: 0.9, rot: (Math.random() - 0.5) * 0.6, size };
+    // World height ~1.1 * size; width follows the text's real aspect ratio.
+    s.userData = { life: 0.9, rot: (Math.random() - 0.5) * 0.5, size, aspect: w / H };
     s.material.rotation = s.userData.rot;
     this.scene.add(s);
     this.texts.push(s);
@@ -139,7 +152,7 @@ export class Fx {
       if (u.life <= 0) { this.scene.remove(s); s.material.map.dispose(); s.material.dispose(); this.texts.splice(i, 1); continue; }
       const age = 0.9 - u.life;
       const pop = age < 0.12 ? age / 0.12 * 1.3 : 1.3 - Math.min(0.3, (age - 0.12) * 2);
-      s.scale.set(2.2 * pop * u.size, 1.1 * pop * u.size, 1);
+      s.scale.set(1.1 * u.aspect * pop * u.size, 1.1 * pop * u.size, 1);
       s.position.y += dt * 1.2;
       s.material.opacity = Math.min(1, u.life * 3);
     }

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { CONFIG } from '../config.js';
-import { COLORS, HATS } from '../shared/cosmetics.js';
+import { COLORS, HATS as HATS_LIST, EYES as EYES_LIST, OUTFITS as OUTFITS_LIST, validItem } from '../cosmetics/catalog.js';
 import { HostNet } from '../net/hostNet.js';
 import { Engine } from './engine.js';
 import { Ball } from './ball.js';
@@ -11,6 +11,7 @@ import { Sfx } from './audio.js';
 import { HostUI, placeLabel } from './ui.js';
 import { Keyboard } from './keyboard.js';
 import { GAMES, LOBBY, gameById } from '../games/index.js';
+import { buildTheme } from '../games/env.js';
 
 const engine = new Engine(document.getElementById('stage'));
 const fx = new Fx(engine.scene);
@@ -47,12 +48,12 @@ function cleanName(s) {
   return String(s || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 12) || 'Ball';
 }
 
-function makePlayer({ id, name, color, hat, client = null, keyboard = false }) {
+function makePlayer({ id, name, color, hat, eyes, outfit, skin, client = null, keyboard = false }) {
   const used = new Set(playerList().map((p) => p.color));
   if (!COLORS.includes(color) || used.has(color)) color = COLORS.find((c) => !used.has(c)) || COLORS[0];
   const p = {
     id, name: cleanName(name), color,
-    hat: HATS.some((h) => h.id === hat) ? hat : 'none',
+    hat: validItem('hat', hat), eyes: validItem('eyes', eyes), outfit: validItem('outfit', outfit), skin: validItem('skin', skin),
     client, keyboard, connected: true,
     score: 0, order: joinCounter++,
     input: { x: 0, y: 0 },
@@ -99,6 +100,9 @@ function addKeyboardPlayer() {
   if (!claim) { ui.toast('All keyboard slots are taken'); return; }
   if (players.size >= CONFIG.maxPlayers) { kb.release(id); ui.toast('Room is full'); return; }
   const p = makePlayer({ id, name: claim.layout.name.replace(/Keys \((.*)\)/, '$1'), color: null, hat: 'none', keyboard: true });
+  // Keyboard testers get a random outfit so they're easy to tell apart.
+  const rnd = (kind) => { const l = { hat: HATS_LIST, eyes: EYES_LIST, outfit: OUTFITS_LIST }[kind]; return l[Math.floor(Math.random() * l.length)].id; };
+  p.ball.setLook({ hat: rnd('hat'), eyes: rnd('eyes'), outfit: rnd('outfit') });
   p.kbSlot = claim.slot;
   ui.toast(`${claim.layout.name} player added. ${claim.layout.action} = boost`);
   if (phase !== 'lobby') p.status = { title: 'Hang tight!', text: "You'll join next round." };
@@ -125,7 +129,7 @@ const net = new HostNet({
         client.send({ t: 'phase', phase: 'full', title: 'Room is full', text: 'Wait for the next match!' });
         return;
       }
-      p = makePlayer({ id: client.id, name: hello.name, color: hello.color, hat: hello.hat, client });
+      p = makePlayer({ id: client.id, name: hello.name, color: hello.color, hat: hello.hat, eyes: hello.eyes, outfit: hello.outfit, skin: hello.skin, client });
       ui.toast(`${p.name} joined!`);
       if (phase !== 'lobby') p.status = { title: 'Hang tight!', text: "You'll join next round." };
       addToLobby(p);
@@ -225,6 +229,8 @@ function makeCtx(def, level, participants) {
     setTimer: (s) => ui.setTimer(s),
     setScores: (rows) => ui.setScores(rows),
     end: (groups) => { if (current && current.ctx === ctx) endRound(groups); },
+    /** Slow-mo + close-up on a player right now (e.g. about to cross a finish line). */
+    dramatic: (p) => { if (current && current.ctx === ctx) startFinale(p, 'win'); },
   };
   return ctx;
 }
@@ -234,7 +240,8 @@ function loadGame(def, participants) {
   for (const p of participants) { p.ball.tuning = { ...CONFIG.ball }; p.ball.data = {}; }
   const level = engine.createLevel();
   const ctx = makeCtx(def, level, participants);
-  current = { def, ctx, inst: {} };
+  current = { def, ctx, inst: {}, env: null };
+  current.env = buildTheme(ctx, def.theme || 'meadow');
   current.inst = def.create(ctx) || {};
 }
 
@@ -244,6 +251,7 @@ function unloadGame() {
   current.ctx.level.dispose();
   for (const p of players.values()) p.ball.deactivate();
   current = null;
+  finale.active = false;
   ui.setScores(null);
   ui.setTimer(null);
 }
@@ -251,7 +259,7 @@ function unloadGame() {
 // ---------------------------------------------------------------- phases
 function enterLobby() {
   clearTimers();
-  engine.timeScale = 1;
+  engine.setTimeScale(1, 0);
   phase = 'lobby';
   ui.hideResults(); ui.hideWinner(); ui.hideIntro();
   ui.setHud(null);
@@ -269,6 +277,10 @@ function pickGame() {
   return (pool.length ? pool : GAMES)[Math.floor(Math.random() * (pool.length || GAMES.length))];
 }
 
+// Intro timing (ms): banner + camera swoop, then 3-2-1-GO. Players can move at GO;
+// the level itself (spinners, falling tiles, timers) wakes up HAZARD_DELAY later.
+const INTRO_READ = 2200, COUNT_STEP = 800, HAZARD_DELAY = 1000;
+
 function startRound() {
   if (phase !== 'lobby') return;
   const participants = playerList().filter((p) => p.connected);
@@ -283,24 +295,27 @@ function startRound() {
   ui.setHud(def.name);
   engine.follow(null);
   loadGame(def, participants);
+  engine.swoopIn();
   for (const p of players.values()) {
     p.status = participants.includes(p) ? { title: def.name, text: def.howTo } : { title: 'Hang tight!', text: "You'll join next round." };
   }
   sendPhaseAll();
   ui.showIntro(def);
-  ui.setCountdown('');
 
   let n = 3;
   const tick = () => {
-    if (n > 0) { ui.setCountdown(n); audio.beep(); n--; later(800, tick); return; }
-    ui.setCountdown('GO!');
+    if (n > 0) { ui.countdown(n); audio.beep(); n--; later(COUNT_STEP, tick); return; }
+    ui.countdown('GO!', true);
     audio.beep(true);
-    phase = 'playing';
-    current.inst.start?.();
+    ui.hideIntro();
+    phase = 'playing';             // balls can roll now...
     sendPhaseAll();
-    later(700, () => ui.hideIntro());
+    const inst = current.inst;
+    later(HAZARD_DELAY, () => {    // ...and a beat later the level comes alive
+      if (current?.inst === inst && phase === 'playing') inst.start?.();
+    });
   };
-  later(2600, tick); // time to read the instructions first
+  later(INTRO_READ, tick);
 }
 
 function endRound(groups) {
@@ -324,18 +339,28 @@ function endRound(groups) {
   }
 
   const winners = groups[0] || [];
-  zoomOn(winners);
-  ui.announce(winners.length ? `${winners.map((p) => p.name).join(' & ')} wins!` : 'Round over!', null, 1800);
-  audio.fanfare();
-  fx.confetti(new THREE.Vector3(0, 10, 0), 90);
-  engine.timeScale = 0.35; // dramatic slow-mo
-  later(1300, () => { engine.timeScale = 1; });
+  const celebrate = () => {
+    zoomOn(winners);
+    ui.announce(winners.length ? `${winners.map((p) => p.name).join(' & ')} wins!` : 'Round over!', null, 1800);
+    audio.fanfare();
+    const c = winners[0]?.ball.active ? winners[0].ball.position : { x: 0, y: 0, z: 0 };
+    fx.confetti(new THREE.Vector3(c.x, c.y + 9, c.z), 110);
+  };
+  if (finale.active && finale.kind === 'ko') {
+    // We're in slow-mo watching the deciding fall: let the splash play, then swing to the winner.
+    later(750, () => { engine.setTimeScale(1, 1.1); celebrate(); });
+  } else {
+    engine.setTimeScale(1, 0.6);
+    celebrate();
+  }
+  finale.active = false;
 
   match.round++;
   const last = match.round >= match.rounds;
-  later(1800, () => ui.showResults(`${current.def.name}: results`, rows,
+  const def = current.def;
+  later(2200, () => ui.showResults(`${def.name}: results`, rows,
     last ? 'Final round done! Crowning the champion…' : `Round ${match.round} of ${match.rounds} · Tap to continue`));
-  later(8500, advance);
+  later(9000, advance);
   sendPhaseAll();
 }
 
@@ -382,7 +407,72 @@ function showWinner() {
 function zoomOn(list) {
   const targets = list.filter((p) => players.has(p.id));
   if (!targets.length) return;
-  engine.follow(() => targets.filter((p) => p.ball.active).map((p) => p.ball.position), { min: 6, max: 14, pad: 1, dir: [0.35, 0.55, 0.75], speed: 0.2 });
+  engine.follow(() => targets.filter((p) => p.ball.active).map((p) => p.ball.position), { min: 6, max: 14, pad: 1, dir: [0.3, 0.8, 0.55], smooth: 0.7 });
+}
+
+// ---------------------------------------------------------------- slow-mo director
+// Every physics step during a round we predict where airborne balls are headed by
+// tracing their flight path (a gravity arc) with raycasts against the level. If a ball
+// whose fall decides the round is surely going into the lava, we ease into slow-mo and
+// zoom in on it; when the game ends the round we swing over to the winner.
+// Games opt in by returning `contenders()` (balls still in the running) and `lavaY`.
+// Race-style games can call ctx.dramatic(player) themselves (e.g. near the finish line).
+const finale = { active: false, kind: null, player: null, t: 0, saved: null };
+const _from = new CANNON.Vec3(), _to = new CANNON.Vec3(), _ray = new CANNON.RaycastResult();
+const FEET = [[0, 0], [0.3, 0], [-0.3, 0], [0, 0.3], [0, -0.3]];
+
+function predictDoom(ball, lavaY) {
+  if (ball._groundedCache) return false;
+  const b = ball.body, g = engine.world.gravity.y, h = 1 / 30;
+  let x = b.position.x, y = b.position.y - ball.radius * 0.9, z = b.position.z;
+  let vx = b.velocity.x, vy = b.velocity.y, vz = b.velocity.z;
+  for (let i = 0; i < 60; i++) { // up to 2 seconds ahead
+    const nx = x + vx * h, ny = y + vy * h, nz = z + vz * h;
+    vy += g * h;
+    for (const [ox, oz] of FEET) {
+      _from.set(x + ox, y, z + oz); _to.set(nx + ox, ny, nz + oz);
+      _ray.reset();
+      engine.world.raycastClosest(_from, _to, { skipBackfaces: true }, _ray);
+      if (_ray.hasHit && _ray.body !== b) return false; // lands on something: safe (for now)
+    }
+    x = nx; y = ny; z = nz;
+    if (y < lavaY) return true;
+  }
+  return false;
+}
+
+function startFinale(p, kind) {
+  if (finale.active || phase !== 'playing') return;
+  finale.active = true; finale.kind = kind; finale.player = p; finale.t = engine.realTime;
+  finale.saved = engine.saveCamera();
+  engine.setTimeScale(kind === 'ko' ? 0.22 : 0.35, 0.35);
+  engine.follow(() => (p.ball.active ? [p.ball.position] : []), { min: 5.5, max: 9, pad: 0.5, dir: [0.25, 0.55, 0.8], smooth: 0.35 });
+  audio.slowmo?.();
+}
+
+function cancelFinale() {
+  if (!finale.active) return;
+  finale.active = false;
+  engine.setTimeScale(1, 0.5);
+  engine.restoreCamera(finale.saved);
+}
+
+function directorStep(dt) {
+  if (phase !== 'playing' || !current) return;
+  const inst = current.inst;
+  if (finale.active) {
+    // Safety net: if the round didn't end (they somehow survived), go back to normal.
+    const age = engine.realTime - finale.t; // real seconds
+    const b = finale.player.ball;
+    if (age > 3.5 || (finale.kind === 'ko' && b.active && b._groundedCache && age > 0.4)) cancelFinale();
+    return;
+  }
+  if (!inst.contenders || inst.lavaY === undefined) return;
+  const alive = inst.contenders();
+  if (!alive.length || alive.length > 2) return; // only when this fall decides the round
+  for (const p of alive) {
+    if (p.ball.active && predictDoom(p.ball, inst.lavaY)) { startFinale(p, 'ko'); return; }
+  }
 }
 
 // ---------------------------------------------------------------- physics events
@@ -451,11 +541,14 @@ function onFixed(dt) {
     if (canMove && p.connected) b.applyInput(p.input.x, p.input.y, dt);
   }
   try { current.inst.update?.(dt); } catch (e) { console.error('[game update]', e); }
+  directorStep(dt);
 }
 
-function onFrame(dt) {
+/** dt is game time (slows down in slow-mo); realDt is wall-clock. */
+function onFrame(dt, realDt) {
   for (const p of players.values()) p.ball.frame(dt);
   try { current?.inst.frame?.(dt); } catch (e) { console.error('[game frame]', e); }
+  try { current?.env?.update(dt); } catch (e) { console.error('[theme]', e); }
   fx.update(dt);
 }
 
@@ -487,4 +580,4 @@ for (let i = 0; i < kbCount; i++) addKeyboardPlayer();
 window.addEventListener('pagehide', () => net.shutdown());
 
 // Expose for console tinkering: window.bb.players, window.bb.engine ...
-window.bb = { engine, players, match, fx, audio, get current() { return current; }, startRound, addKeyboardPlayer, kick: kickPlayer };
+window.bb = { engine, players, match, fx, audio, finale, get current() { return current; }, get phase() { return phase; }, startRound, addKeyboardPlayer, kick: kickPlayer };
