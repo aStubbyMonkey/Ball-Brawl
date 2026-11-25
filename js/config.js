@@ -20,17 +20,22 @@ export const CONFIG = {
   maxPlayers: 12,
   roundsPerMatch: 5,
   placementPoints: [3, 2, 1], // points for 1st, 2nd, 3rd... in each round
-  lobbyDisconnectGraceMs: 20000,
+  lobbyDisconnectGraceMs: 10000, // a disconnected player's spot is kept this long in the lobby
+  heartbeatTimeoutMs: 4000,      // no messages for this long = player is gone
 
   // Default ball feel. Games can override per ball via ball.tuning.
+  // Movement is "velocity seeking": tilt sets a target speed and the ball accelerates
+  // toward it, so letting go of the tilt brakes you to a stop.
   ball: {
     radius: 0.5,
     mass: 1,
-    force: 26,        // how hard tilt pushes
-    airControl: 0.35, // fraction of force while airborne
-    maxSpeed: 11,     // tilt stops adding speed past this
-    dashImpulse: 8,
+    maxSpeed: 7,      // full tilt = this speed (units/sec)
+    accel: 8,         // how eagerly it chases the target speed (higher = snappier)
+    maxAccel: 22,     // cap on that acceleration
+    airControl: 0.3,  // fraction of control while airborne
+    dashImpulse: 9,
     dashCooldown: 1.2,
     bonkBoost: 0.45,  // extra knockback on ball-vs-ball hits (silly physics!)
+    hitStun: 0.45,    // seconds of reduced control after a big hit, so knockback actually carries
   },
 };

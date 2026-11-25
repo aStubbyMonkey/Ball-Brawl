@@ -6,7 +6,7 @@ export const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', 
 const dot = (color) => `<span class="dot" style="background:${esc(color)}"></span>`;
 
 export class HostUI {
-  /** handlers: { onPick(id), onStart(), onAddKeyboard(), onRounds(n), onSkip() } */
+  /** handlers: { onPick(id), onStart(), onAddKeyboard(), onRounds(n), onSkip(), onKick(id, ban) } */
   constructor(handlers) {
     this.h = handlers;
     this._announceTimer = null;
@@ -41,7 +41,16 @@ export class HostUI {
         ${dot(p.color)}<span>${esc(p.name)}</span>
         ${p.id === vipId ? '<b title="VIP picks the game">⭐</b>' : ''}
         ${p.score ? `<em>${p.score}</em>` : ''}
+        ${p.connected ? '' : '<small>away</small>'}
+        <span class="mod">
+          <button data-kick="${esc(p.id)}" title="Kick (they can rejoin)">✕</button>
+          ${p.keyboard ? '' : `<button data-ban="${esc(p.id)}" title="Ban from this room">⛔</button>`}
+        </span>
       </div>`).join('');
+    $('players').querySelectorAll('[data-kick]').forEach((b) => { b.onclick = () => this.h.onKick(b.dataset.kick, false); });
+    $('players').querySelectorAll('[data-ban]').forEach((b) => {
+      b.onclick = () => { if (confirm('Ban this player from the room? They will not be able to rejoin.')) this.h.onKick(b.dataset.ban, true); };
+    });
 
     const cards = [{ id: 'random', name: 'Surprise me', emoji: '🎲', tagline: 'Random game' }, ...games];
     const grid = $('games');
@@ -112,15 +121,17 @@ export class HostUI {
       </div>`).join('');
     $('results-footer').textContent = footer || '';
     $('results').classList.remove('hidden');
+    document.body.classList.add('celebrating');
   }
-  hideResults() { $('results').classList.add('hidden'); }
+  hideResults() { $('results').classList.add('hidden'); document.body.classList.remove('celebrating'); }
 
   showWinner(winners, rows) {
     $('winner-name').innerHTML = winners.map((p) => `${dot(p.color)}${esc(p.name)}`).join(' &amp; ');
     $('winner-rows').innerHTML = rows.map((r) => `<div>${r.placeLabel} ${esc(r.player.name)}: <b>${r.player.score}</b></div>`).join('');
     $('winner').classList.remove('hidden');
+    document.body.classList.add('celebrating');
   }
-  hideWinner() { $('winner').classList.add('hidden'); }
+  hideWinner() { $('winner').classList.add('hidden'); document.body.classList.remove('celebrating'); }
 
   toast(text, ms = 2500) {
     const el = $('toast');

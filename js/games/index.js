@@ -3,12 +3,14 @@
 import lobby from './lobby.js';
 import bumpArena from './bumpArena.js';
 import lastBallRolling from './lastBallRolling.js';
+import towerDrop from './towerDrop.js';
 
 export const LOBBY = lobby;
 
 export const GAMES = [
   bumpArena,
   lastBallRolling,
+  towerDrop,
   // ballRace,      // TODO: drifty obstacle course
   // collectAThon,  // TODO: grab glowing orbs
 ];

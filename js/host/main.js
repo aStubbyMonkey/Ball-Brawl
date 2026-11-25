@@ -6,7 +6,7 @@ import { COLORS, HATS } from '../shared/cosmetics.js';
 import { HostNet } from '../net/hostNet.js';
 import { Engine } from './engine.js';
 import { Ball } from './ball.js';
-import { Fx } from './fx.js';
+import { Fx, WORDS, pick } from './fx.js';
 import { Sfx } from './audio.js';
 import { HostUI, placeLabel } from './ui.js';
 import { Keyboard } from './keyboard.js';
@@ -35,6 +35,7 @@ const ui = new HostUI({
   onAddKeyboard: () => addKeyboardPlayer(),
   onRounds(n) { match.rounds = Math.max(1, n | 0); refreshLobby(); },
   onSkip: () => advance(),
+  onKick: (id, ban) => kickPlayer(id, ban),
 });
 const kb = new Keyboard((pid) => onAction(players.get(pid)));
 const unlockAudio = () => { audio.unlock(); document.getElementById('sound-hint')?.remove(); };
@@ -77,6 +78,14 @@ function removePlayer(p) {
   sendPhaseAll();
 }
 
+function kickPlayer(id, ban) {
+  const p = players.get(id);
+  if (!p) return;
+  if (!p.keyboard) net.kick(p.id, ban);
+  ui.toast(ban ? `${p.name} was banned` : `${p.name} was removed`);
+  removePlayer(p);
+}
+
 function addToLobby(p) {
   if (phase === 'lobby' && current && !current.ctx.players.includes(p)) {
     current.ctx.players.push(p);
@@ -102,10 +111,15 @@ const net = new HostNet({
   onJoin(client, isReconnect, hello) {
     let p = players.get(client.id);
     if (p) {
+      const wasAway = !p.connected;
       p.client = client;
       p.connected = true;
       clearTimeout(p.removeTimer);
-      ui.toast(`${p.name} is back!`);
+      if (wasAway) {
+        ui.toast(`${p.name} is back!`);
+        if (phase === 'lobby' && current && !p.ball.active) current.inst.onPlayerJoin?.(p);
+        else if (current && current.ctx.players.includes(p)) current.inst.onPlayerReturn?.(p);
+      }
     } else {
       if (players.size >= CONFIG.maxPlayers) {
         client.send({ t: 'phase', phase: 'full', title: 'Room is full', text: 'Wait for the next match!' });
@@ -126,10 +140,21 @@ const net = new HostNet({
     p.connected = false;
     p.input = { x: 0, y: 0 };
     ui.toast(`${p.name} disconnected`);
+    if (current && current.ctx.players.includes(p)) {
+      current.inst.onPlayerLeave?.(p);
+      if (p.ball.active) { fx.poof(p.ball.position); p.ball.deactivate(); }
+    }
     if (phase === 'lobby') scheduleRemoval(p);
-    else current?.inst.onPlayerLeave?.(p);
     refreshLobby();
     sendPhaseAll();
+  },
+  onBye(client) {
+    // Left on purpose (Leave button / closed the tab): remove right away.
+    const p = players.get(client.id);
+    if (!p) return;
+    ui.toast(`${p.name} left`);
+    if (p.ball.active) fx.poof(p.ball.position);
+    removePlayer(p);
   },
   onMessage(client, msg) {
     const p = players.get(client.id);
@@ -231,6 +256,7 @@ function enterLobby() {
   ui.hideResults(); ui.hideWinner(); ui.hideIntro();
   ui.setHud(null);
   ui.showLobby(true);
+  engine.follow(null);
   loadGame(LOBBY, playerList());
   for (const p of players.values()) { p.status = null; if (!p.connected) scheduleRemoval(p); }
   refreshLobby();
@@ -255,6 +281,7 @@ function startRound() {
   phase = 'intro';
   ui.showLobby(false);
   ui.setHud(def.name);
+  engine.follow(null);
   loadGame(def, participants);
   for (const p of players.values()) {
     p.status = participants.includes(p) ? { title: def.name, text: def.howTo } : { title: 'Hang tight!', text: "You'll join next round." };
@@ -297,6 +324,7 @@ function endRound(groups) {
   }
 
   const winners = groups[0] || [];
+  zoomOn(winners);
   ui.announce(winners.length ? `${winners.map((p) => p.name).join(' & ')} wins!` : 'Round over!', null, 1800);
   audio.fanfare();
   fx.confetti(new THREE.Vector3(0, 10, 0), 90);
@@ -335,8 +363,11 @@ function showWinner() {
     return { player: p, placeLabel: placeLabel(place) };
   });
   ui.showWinner(winners, rows);
-  // Winners hop around in the middle of the arena.
-  winners.forEach((p, i) => p.ball.active && p.ball.spawn([(i - (winners.length - 1) / 2) * 1.5, 3, 0]));
+  // Everyone goes to the lobby arena; the camera zooms on the champion(s), who can roll around.
+  ui.setHud(null);
+  loadGame(LOBBY, playerList().filter((p) => p.connected));
+  winners.forEach((p, i) => p.ball.spawn([(i - (winners.length - 1) / 2) * 1.5, 3, 0]));
+  zoomOn(winners);
   audio.fanfare();
   fx.confetti(new THREE.Vector3(0, 12, 0), 220);
   later(1500, () => fx.confetti(new THREE.Vector3(0, 12, 0), 150));
@@ -345,6 +376,13 @@ function showWinner() {
     setStatus(p, winners.includes(p) ? '🏆 CHAMPION! 🏆' : `You finished ${r ? r.placeLabel : ''}`, `${p.score} points. GG!`);
   }
   later(14000, advance);
+}
+
+/** Camera follows these players closely (winner celebration). */
+function zoomOn(list) {
+  const targets = list.filter((p) => players.has(p.id));
+  if (!targets.length) return;
+  engine.follow(() => targets.filter((p) => p.ball.active).map((p) => p.ball.position), { min: 6, max: 14, pad: 1, dir: [0.35, 0.55, 0.75], speed: 0.2 });
 }
 
 // ---------------------------------------------------------------- physics events
@@ -357,15 +395,41 @@ function onBallHit(ball, otherBody, impact, normal) {
     ball.body.applyImpulse(new CANNON.Vec3(-normal.x * I, 0.12 * I, -normal.z * I));
     other.body.applyImpulse(new CANNON.Vec3(normal.x * I, 0.12 * I, normal.z * I));
     const k = Math.min(1, impact / 10);
+    if (impact > 2) { ball.stagger(0.15 + k * 0.35); other.stagger(0.15 + k * 0.35); }
     if (impact > 1.5) {
-      audio.bonk(k);
       ball.poke(k * 0.6); other.poke(k * 0.6);
       const mid = new THREE.Vector3().addVectors(ball.position, other.position).multiplyScalar(0.5);
       fx.burst(mid, '#ffffff', { count: 4 + Math.round(k * 8), speed: 3 + k * 4, up: 2, size: 0.08, life: 0.4 });
-      if (impact > 6) { fx.popText(mid); engine.addShake(0.12 * k); }
+      if (impact > 10) {
+        // Huge head-on hit: KABOOM!
+        fx.explosion(mid);
+        fx.popText(mid, pick(WORDS.boom), '#ff4d6d', 1.5);
+        audio.boom();
+        engine.addShake(0.4);
+      } else if (impact > 6) {
+        audio.bonk(k);
+        fx.popText(mid, pick(WORDS.big), '#ffd60a', 1.2);
+        engine.addShake(0.15 * k);
+      } else if (impact > 3) {
+        audio.bonk(k);
+        fx.popText(mid, pick(WORDS.bonk), '#ffffff', 0.8);
+      } else audio.bonk(k);
       if (impact > 3) { ball.player.client?.send({ t: 'buzz', ms: 30 + k * 60 }); other.player.client?.send({ t: 'buzz', ms: 30 + k * 60 }); }
     }
     current.inst.onHit?.(ball, other, impact);
+  } else if (otherBody.bounce) {
+    // Bumpers / spinners: a body with .bounce = N launches you away with impulse N.
+    const I = otherBody.bounce * ball.tuning.mass;
+    ball.body.velocity.set(ball.body.velocity.x * 0.3, Math.max(0, ball.body.velocity.y), ball.body.velocity.z * 0.3);
+    ball.body.applyImpulse(new CANNON.Vec3(-normal.x * I, I * 0.22, -normal.z * I));
+    ball.stagger(0.6);
+    ball.poke(0.5);
+    audio.boing();
+    fx.popText(ball.position, pick(WORDS.boing), '#4cc9f0', 1);
+    fx.burst(ball.position, '#4cc9f0', { count: 10, speed: 5, up: 2, size: 0.1, life: 0.4 });
+    engine.addShake(0.1);
+    ball.player.client?.send({ t: 'buzz', ms: 60 });
+    current.inst.onBodyHit?.(ball, otherBody, impact);
   } else if (otherBody.material === engine.mat.bouncy && impact > 1.5) {
     audio.bonk(Math.min(1, impact / 10));
     ball.poke(0.3);
@@ -379,7 +443,7 @@ function onBallHit(ball, otherBody, impact, normal) {
 function onFixed(dt) {
   for (const p of players.values()) if (p.keyboard) { const v = kb.read(p.kbSlot); p.input.x = v.x; p.input.y = v.y; }
   if (!current) return;
-  const canMove = phase === 'lobby' || phase === 'playing' || phase === 'winner';
+  const canMove = phase !== 'intro';
   for (const p of current.ctx.players) {
     const b = p.ball;
     if (!b.active) continue;
@@ -419,5 +483,8 @@ for (let i = 0; i < kbCount; i++) addKeyboardPlayer();
   }
 })();
 
+// Closing the TV tab: tell phones the game is over and drop off the network.
+window.addEventListener('pagehide', () => net.shutdown());
+
 // Expose for console tinkering: window.bb.players, window.bb.engine ...
-window.bb = { engine, players, match, fx, audio, get current() { return current; }, startRound, addKeyboardPlayer };
+window.bb = { engine, players, match, fx, audio, get current() { return current; }, startRound, addKeyboardPlayer, kick: kickPlayer };

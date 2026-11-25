@@ -6,7 +6,6 @@ import { makeLava, ringSpawns } from './helpers.js';
 
 const TILE = 1.6;
 const GAP = 0.06;
-const START_RADIUS = 9.5;
 const MIN_TILES = 4;
 const SOLO_TIME = 75; // with one player, survive this long to "win"
 
@@ -20,7 +19,9 @@ export default {
   minPlayers: 1,
 
   create(ctx) {
-    ctx.engine.setCamera({ pos: [0, 20, 15], look: [0, -1, 0.5] });
+    const START_RADIUS = Math.min(12.5, 9.5 + Math.max(0, ctx.players.length - 4) * 0.45);
+    const cs = START_RADIUS / 9.5;
+    ctx.engine.setCamera({ pos: [0, 20 * cs, 15 * cs], look: [0, -1, 0.5] });
     const lava = makeLava(ctx, -3.5);
 
     // Build a circle of square tiles.
@@ -55,6 +56,7 @@ export default {
 
     const solo = ctx.players.length === 1;
     let running = false;
+    let finished = false;
     let elapsed = 0;
     let dropTimer = 3; // grace period
     const outOrder = []; // first eliminated first
@@ -70,8 +72,15 @@ export default {
       }
     }
 
+    function safeTile() {
+      const solid = tiles.filter((t) => t.state === 'solid');
+      const t = solid[solid.length - 1] || tiles[tiles.length - 1];
+      return [t.body.position.x, 3, t.body.position.z];
+    }
+
     function knockOut(p) {
       const d = p.ball.data;
+      if (finished) { ctx.spawn(p, safeTile()); return; } // celebrating: just pop back up
       d.out = true; d.outAt = elapsed;
       outOrder.push(p);
       ctx.fx.splash(p.ball.position);
@@ -87,6 +96,7 @@ export default {
 
     function finish() {
       running = false;
+      finished = true;
       const alive = ctx.players.filter((p) => !p.ball.data.out);
       const groups = [];
       if (alive.length) groups.push(alive);

@@ -10,6 +10,8 @@ const EYE_GEO = new THREE.SphereGeometry(1, 16, 12);
 const EYE_WHITE = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
 const PUPIL = new THREE.MeshBasicMaterial({ color: 0x111111 });
 const TRAIL_N = 16;
+const _axis = new THREE.Vector3();
+const _dq = new THREE.Quaternion();
 
 export class Ball {
   /**
@@ -25,6 +27,9 @@ export class Ball {
     this.radius = R;
     this.active = false;
     this.dashTimer = 0;
+    this.dashGrace = 0; // brief window after a dash where we don't brake the burst away
+    this.stun = 0;      // brief window after a hit with reduced control
+    this.rollQ = new THREE.Quaternion();
     this.squash = 0; this.squashVel = 0;
     this.yaw = 0;
     this.blink = 2 + Math.random() * 3;
@@ -34,8 +39,10 @@ export class Ball {
       mass: this.tuning.mass,
       shape: new CANNON.Sphere(R),
       material: engine.mat.ball,
-      linearDamping: 0.12,
-      angularDamping: 0.25,
+      linearDamping: 0.05,
+      // The physics sphere never spins (spin was what made balls fly off and feel
+      // uncontrollable). The rolling you see is purely visual, driven by velocity.
+      fixedRotation: true,
     });
     body.ball = this;
     body.addEventListener('collide', (e) => {
@@ -107,7 +114,7 @@ export class Ball {
     this.active = true;
     this.yaw = yaw;
     this.root.visible = true;
-    this.dashTimer = 0;
+    this.dashTimer = 0; this.dashGrace = 0; this.stun = 0;
     for (const t of this.trail) { t.visible = false; t.userData.life = 0; }
     this.sync();
   }
@@ -133,23 +140,31 @@ export class Ball {
   applyInput(x, y, dt) {
     if (!this.active) return;
     const T = this.tuning;
-    const fx = x, fz = -y;
-    const mag = Math.hypot(fx, fz);
-    if (mag < 0.001) return;
     const v = this.body.velocity;
-    const along = (v.x * fx + v.z * fz) / mag;
-    const cap = Math.max(0, Math.min(1, 1 - (along - T.maxSpeed * 0.8) / (T.maxSpeed * 0.2)));
-    const air = this._groundedCache ? 1 : T.airControl;
-    const F = T.force * T.mass * air * cap;
-    this.body.applyForce(new CANNON.Vec3(fx * F, 0, fz * F), this.body.position);
+    // Tilt picks a target velocity; accelerate toward it (no tilt = brake to a stop).
+    let ax = (x * T.maxSpeed - v.x) * T.accel;
+    let az = (-y * T.maxSpeed - v.z) * T.accel;
+    let lim = T.maxAccel * (this._groundedCache ? 1 : T.airControl);
+    if (this.stun > 0) lim *= 0.15;
+    if (this.dashGrace > 0) lim *= 0.2;
+    const m = Math.hypot(ax, az);
+    if (m > lim) { ax *= lim / m; az *= lim / m; }
+    // NOTE: no second argument. cannon's applyForce point is *relative* to the center;
+    // passing a world position here is what used to spin balls like crazy.
+    this.body.applyForce(new CANNON.Vec3(ax * T.mass, 0, az * T.mass));
   }
 
   /** Called once per fixed step before applyInput. */
   step(dt) {
     if (!this.active) return;
     this.dashTimer = Math.max(0, this.dashTimer - dt);
+    this.dashGrace = Math.max(0, this.dashGrace - dt);
+    this.stun = Math.max(0, this.stun - dt);
     this._groundedCache = this.isGrounded();
   }
+
+  /** Knock the ball around and briefly reduce its control. */
+  stagger(seconds = this.tuning.hitStun) { this.stun = Math.max(this.stun, seconds); }
 
   /** Quick burst. Direction = tilt if tilting, else current velocity. */
   dash(x, y) {
@@ -162,6 +177,7 @@ export class Ball {
     const I = this.tuning.dashImpulse * this.tuning.mass;
     this.body.applyImpulse(new CANNON.Vec3(dx * I, 1.5, dz * I));
     this.dashTimer = this.tuning.dashCooldown;
+    this.dashGrace = 0.3;
     this.poke(0.35);
     return true;
   }
@@ -172,7 +188,7 @@ export class Ball {
   sync() {
     const p = this.body.position;
     this.mesh.position.set(p.x, p.y, p.z);
-    this.mesh.quaternion.set(this.body.quaternion.x, this.body.quaternion.y, this.body.quaternion.z, this.body.quaternion.w);
+    this.mesh.quaternion.copy(this.rollQ);
     this.face.position.set(p.x, p.y, p.z);
     this.label.position.set(p.x, p.y + this.radius + 0.95, p.z);
   }
@@ -180,9 +196,15 @@ export class Ball {
   /** Per rendered frame: visuals only. */
   frame(dt) {
     if (!this.active) return;
-    this.sync();
     const v = this.body.velocity;
     const speed = Math.hypot(v.x, v.z);
+    // Visual roll: rotate around the axis perpendicular to travel.
+    if (speed > 0.01) {
+      _axis.set(v.z / speed, 0, -v.x / speed);
+      _dq.setFromAxisAngle(_axis, (speed * dt) / this.radius);
+      this.rollQ.premultiply(_dq);
+    }
+    this.sync();
 
     // Face turns toward travel direction.
     if (speed > 0.6) {

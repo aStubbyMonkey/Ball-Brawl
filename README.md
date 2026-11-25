@@ -40,7 +40,15 @@ js/games/helpers.js        lava, platforms, boxes, spawn rings, ranking helpers
 js/games/lobby.js          the lobby is just a mini-game that never ends
 js/games/bumpArena.js      knock others into lava, most KOs wins
 js/games/lastBallRolling.js  crumbling tile floor, last ball standing
+js/games/towerDrop.js      5 stacked floors, tiles vanish when touched, follow camera
 ```
+
+### Moderating
+
+Hover a player chip in the lobby: **✕** kicks them (they can rejoin), **⛔** bans them from this room.
+Phones that close the tab or press **Leave** disappear right away. Phones that just go silent
+(locked screen, lost Wi-Fi) are hidden after 4 seconds and removed after 10 unless they come back.
+Closing the TV tab ends the room for everyone, since nothing runs on a server.
 
 ### Adding a mini-game
 
@@ -49,7 +57,9 @@ js/games/lastBallRolling.js  crumbling tile floor, last ball standing
 3. Call `ctx.end([[winners], [second], ...])` when the round is over.
 4. Import it in `js/games/index.js` and add it to `GAMES`.
 
-Main applies tilt to every ball automatically. Change the feel per game with `p.ball.tuning.force`, `.maxSpeed`, etc.
+Main applies tilt to every ball automatically. Change the feel per game with `p.ball.tuning.maxSpeed`, `.accel`, etc.
+Want a bumper that launches balls? Give any physics body a `bounce` value (e.g. `body.bounce = 12`).
+`ctx.engine.follow(() => positions)` makes the camera auto-frame a set of balls.
 
 ### Networking notes
 

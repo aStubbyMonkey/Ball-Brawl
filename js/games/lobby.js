@@ -34,7 +34,7 @@ export default {
     const beachGeo = new THREE.SphereGeometry(1.3, 32, 20);
     const beach = new THREE.Mesh(beachGeo, new THREE.MeshStandardMaterial({ map: beachTexture(), roughness: 0.4 }));
     beach.castShadow = true;
-    const beachBody = new CANNON.Body({ mass: 0.4, shape: new CANNON.Sphere(1.3), material: ctx.engine.mat.ball, linearDamping: 0.3, angularDamping: 0.3 });
+    const beachBody = new CANNON.Body({ mass: 0.4, shape: new CANNON.Sphere(1.3), linearDamping: 0.3, angularDamping: 0.3 });
     beachBody.position.set(0, 3, -2);
     ctx.level.add(beach, beachBody);
 

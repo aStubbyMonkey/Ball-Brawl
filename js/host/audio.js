@@ -79,6 +79,15 @@ export class Sfx {
     this._tone({ type: 'sine', f0: 600, f1: 90, dur: 0.45, vol: 0.25 });
     for (let k = 0; k < 4; k++) this._tone({ type: 'sine', f0: 500 + Math.random() * 700, f1: 900 + Math.random() * 600, dur: 0.06, vol: 0.1, delay: 0.15 + k * 0.07 });
   }
+  boom() {
+    this._noiseHit({ dur: 0.9, vol: 0.6, freq: 600, q: 0.5, type: 'lowpass', sweepTo: 60 });
+    this._tone({ type: 'sine', f0: 160, f1: 30, dur: 0.7, vol: 0.6 });
+    this._tone({ type: 'square', f0: 90, f1: 40, dur: 0.25, vol: 0.12 });
+  }
+  boing() {
+    this._tone({ type: 'sine', f0: 180, f1: 520, dur: 0.35, vol: 0.4 });
+    this._tone({ type: 'triangle', f0: 360, f1: 900, dur: 0.25, vol: 0.15, delay: 0.03 });
+  }
   whoosh() { this._noiseHit({ dur: 0.25, vol: 0.3, freq: 400, q: 2, sweepTo: 2500 }); }
   pop() { this._tone({ type: 'sine', f0: 400, f1: 1200, dur: 0.12, vol: 0.35 }); }
   pickup() {

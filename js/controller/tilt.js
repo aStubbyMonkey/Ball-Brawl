@@ -18,8 +18,9 @@ export class Tilt {
     this.right = null;
     this.fwd = null;
     this.hasSensor = false;
-    this.maxAngle = 24 * DEG; // tilt this far = full speed
-    this.deadzone = 0.07;
+    this.maxAngle = 28 * DEG; // tilt this far = full speed
+    this.deadzone = 0.12;     // small wobbles do nothing
+    this.curve = 1.4;         // >1 = finer control near the middle
     this.smoothing = 0.45;    // 0 = raw, closer to 1 = smoother/laggier
     this.x = 0; this.y = 0;
     this._onOri = this._onOri.bind(this);
@@ -80,7 +81,7 @@ export class Tilt {
     let m = Math.hypot(x, y);
     if (m < this.deadzone) { x = 0; y = 0; }
     else {
-      const k = Math.min(1, (m - this.deadzone) / (1 - this.deadzone)) / m;
+      const k = Math.pow(Math.min(1, (m - this.deadzone) / (1 - this.deadzone)), this.curve) / m;
       x *= k; y *= k;
     }
     const s = this.smoothing;

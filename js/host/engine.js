@@ -23,6 +23,7 @@ export class Engine {
     this.camTargetPos = this.camPos.clone();
     this.camTargetLook = this.camLook.clone();
     this.shake = 0;
+    this._follow = null;
 
     scene.add(new THREE.HemisphereLight(0xdff3ff, 0x7a5c99, 1.1));
     const sun = new THREE.DirectionalLight(0xffffff, 1.8);
@@ -37,6 +38,7 @@ export class Engine {
 
     const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -22, 0) });
     world.allowSleep = false;
+    world.broadphase = new CANNON.SAPBroadphase(world); // fast with hundreds of static tiles
     world.defaultContactMaterial.friction = 0.3;
     world.defaultContactMaterial.restitution = 0.2;
     this.world = world;
@@ -49,10 +51,12 @@ export class Engine {
     };
     const cm = (a, b, friction, restitution) =>
       world.addContactMaterial(new CANNON.ContactMaterial(a, b, { friction, restitution }));
-    cm(this.mat.ball, this.mat.ground, 0.35, 0.25);
-    cm(this.mat.ball, this.mat.ball, 0.05, 0.85);
-    cm(this.mat.ball, this.mat.bouncy, 0.1, 1.4);
-    cm(this.mat.ball, this.mat.ice, 0.01, 0.1);
+    // Zero friction on balls: they never physically roll (fixedRotation), and the
+    // ball controller does all the braking itself. Any friction here pins them in place.
+    cm(this.mat.ball, this.mat.ground, 0, 0.2);
+    cm(this.mat.ball, this.mat.ball, 0, 0.85);
+    cm(this.mat.ball, this.mat.bouncy, 0, 1.2);
+    cm(this.mat.ball, this.mat.ice, 0, 0.1);
 
     this.fixedDt = 1 / 60;
     this.time = 0;
@@ -78,6 +82,37 @@ export class Engine {
     if (look) this.camTargetLook.set(...look);
     if (fov) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
     if (instant) { this.camPos.copy(this.camTargetPos); this.camLook.copy(this.camTargetLook); }
+  }
+
+  /**
+   * Auto-frame a moving set of points. getPoints() returns Vector3-likes each frame.
+   * opts: { min, max, pad, dir:[x,y,z] (camera direction from target), speed }
+   * Pass null to go back to the fixed camera from setCamera().
+   */
+  follow(getPoints, opts = {}) {
+    if (!getPoints) { this._follow = null; return; }
+    const d = opts.dir || [0, 0.78, 0.62];
+    const l = Math.hypot(...d);
+    this._follow = {
+      getPoints, min: opts.min ?? 10, max: opts.max ?? 34, pad: opts.pad ?? 2,
+      dir: new THREE.Vector3(d[0] / l, d[1] / l, d[2] / l), speed: opts.speed ?? 0.12,
+    };
+  }
+
+  _applyFollow() {
+    const f = this._follow;
+    const pts = f.getPoints().filter(Boolean);
+    if (!pts.length) return;
+    const c = new THREE.Vector3();
+    for (const p of pts) c.add(_v.set(p.x, p.y, p.z));
+    c.divideScalar(pts.length);
+    let r = 0;
+    for (const p of pts) r = Math.max(r, _v.set(p.x, p.y, p.z).distanceTo(c));
+    // Fit radius r in a 45deg vertical fov, with a bit extra for wide screens.
+    const aspect = Math.min(1, this.camera.aspect);
+    const dist = Math.max(f.min, Math.min(f.max, (r + f.pad) * 2.6 / aspect));
+    this.camTargetLook.copy(c);
+    this.camTargetPos.copy(c).addScaledVector(f.dir, dist);
   }
 
   addShake(amount) { this.shake = Math.min(0.6, this.shake + amount); }
@@ -134,7 +169,8 @@ export class Engine {
   }
 
   _updateCamera(dt) {
-    const k = 1 - Math.pow(0.02, dt);
+    if (this._follow) this._applyFollow();
+    const k = 1 - Math.pow(this._follow ? this._follow.speed : 0.02, dt);
     this.camPos.lerp(this.camTargetPos, k);
     this.camLook.lerp(this.camTargetLook, k);
     this.camera.position.copy(this.camPos);
@@ -147,6 +183,8 @@ export class Engine {
     this.camera.lookAt(this.camLook);
   }
 }
+
+const _v = new THREE.Vector3();
 
 function skyTexture() {
   const c = document.createElement('canvas');

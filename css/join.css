@@ -58,6 +58,7 @@ button { font-family: inherit; cursor: pointer; }
 .big-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b39500; }
 .big-btn:disabled { opacity: .5; }
 .link { background: none; border: none; color: var(--muted); text-decoration: underline; font-size: 15px; padding: 6px; }
+.top-btns { display: flex; gap: 6px; }
 .chip { background: #0003; color: #fff; border: 2px solid #fff4; border-radius: 99px; padding: 6px 12px; font-size: 14px; }
 .error { color: #ffb3c1; min-height: 1.2em; margin: 0; }
 .small { font-size: 14px; color: var(--muted); }

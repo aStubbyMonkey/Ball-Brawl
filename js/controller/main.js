@@ -20,6 +20,7 @@ const state = {
   tiltOk: false,
   phase: null,
   selectedGame: null,
+  kicked: false,
 };
 if (!state.clientId) {
   state.clientId = Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -68,6 +69,7 @@ $('room-change').onclick = () => { state.room = ''; renderForm(); $('room').focu
 $('room').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, ''); });
 
 $('join-btn').onclick = () => {
+  state.kicked = false;
   state.room = $('room').value.trim().toUpperCase();
   state.name = $('name').value.trim().slice(0, 12) || 'Ball ' + Math.floor(Math.random() * 90 + 10);
   if (state.room.length !== 4) { $('join-error').textContent = 'Enter the 4-letter code from the TV.'; return; }
@@ -98,8 +100,7 @@ async function connect(firstTime) {
       t: 'hello', clientId: state.clientId, name: state.name, color: state.color, hat: state.hat,
     });
   } catch (err) {
-    $('error-text').textContent = err.message;
-    show('screen-error');
+    showError(err.message);
     return;
   }
   history.replaceState(null, '', `?room=${state.room}`);
@@ -166,6 +167,16 @@ function onMessage(msg) {
       break;
     case 'phase': renderPhase(msg); break;
     case 'buzz': buzz(msg.ms || 60); break;
+    case 'kicked':
+      state.kicked = true;
+      net.close();
+      showError(msg.ban ? "You've been banned from this room." : 'The host removed you from the room.', !msg.ban);
+      break;
+    case 'hostclosed':
+      state.kicked = true; // don't auto-reconnect to a closed room
+      net.close();
+      showError('The TV closed the game. Thanks for playing! 👋', false);
+      break;
   }
 }
 
@@ -191,16 +202,43 @@ function renderPhase(m) {
   }
 }
 
-function onClose() {
-  $('error-text').textContent = 'Lost connection to the TV.';
+function showError(text, canRetry = true) {
+  $('error-text').textContent = text;
+  $('retry-btn').classList.toggle('hidden', !canRetry);
+  $('retry-btn').textContent = state.kicked ? 'Join again' : 'Reconnect';
   show('screen-error');
+}
+
+// Connection dropped (network blip, phone locked, etc.): try once automatically.
+let autoRetrying = false;
+function onClose() {
+  if (state.kicked) return;
+  if (!autoRetrying && document.visibilityState === 'visible') {
+    autoRetrying = true;
+    connect(false).finally(() => { autoRetrying = false; });
+    return;
+  }
+  showError('Lost connection to the TV.');
 }
 $('retry-btn').onclick = () => {
   if (!state.room) { show('screen-join'); return; }
+  state.kicked = false;
   requestWakeLock();
   connect(false);
 };
 $('back-btn').onclick = () => { net.close(); show('screen-join'); renderForm(); };
+$('leave-btn').onclick = () => {
+  if (!confirm('Leave the game?')) return;
+  state.kicked = true;
+  net.leave();
+  state.phase = null;
+  show('screen-join'); renderForm();
+  state.kicked = false;
+};
+// Closing the tab / navigating away: tell the TV right away so our ball disappears.
+window.addEventListener('pagehide', () => { if (net.connected) net.leave(); });
+// Came back from the browser's back/forward cache: rejoin silently.
+window.addEventListener('pageshow', (e) => { if (e.persisted && state.phase && !net.connected && !state.kicked) connect(false); });
 
 // Send input at a steady rate. The fast channel is unreliable, so constant
 // re-sends double as loss recovery.
