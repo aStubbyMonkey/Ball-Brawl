@@ -93,7 +93,7 @@
       </div>
     </div>
     <!-- Live close-up of your own ball, streamed from the TV -->
-    <div id="ballcam" class="ballcam hidden"><video id="ballcam-video" autoplay playsinline muted></video></div>
+    <div id="ballcam" class="ballcam hidden"><video id="ballcam-video" autoplay playsinline muted webkit-playsinline></video><span class="tap-hint">Tap to show your ball cam</span></div>
     <div class="status">
       <h2 id="status-title">You're in!</h2>
       <p id="status-text">Roll around while everyone joins.</p>
@@ -118,6 +118,16 @@
     <h2>Oops!</h2>
     <p id="error-text">Lost connection to the TV.</p>
     <button id="retry-btn" class="big-btn">Reconnect</button>
+    <div id="error-help" class="error-help hidden">
+      <b>Still stuck? Try these:</b>
+      <ul>
+        <li>Same Wi-Fi as the TV (mobile data often can't connect)</li>
+        <li>Turn off VPN / Low Data Mode</li>
+        <li>iPhone: open the link in <b>Safari</b>, not inside another app</li>
+        <li>Refresh this page and join again</li>
+      </ul>
+      <p id="error-detail" class="small"></p>
+    </div>
     <button id="back-btn" class="link">Back to start</button>
   </section>
 

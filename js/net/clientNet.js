@@ -26,10 +26,15 @@ export class ClientNet {
     this.close();
     const gen = ++this.gen;
     const mine = () => gen === this.gen;
+    // Steps: 'server' (reaching the free PeerJS matchmaking server) -> 'link' (direct phone<->TV link).
+    this.stage = 'server';
     return new Promise((resolve, reject) => {
       let settled = false;
-      const fail = (err) => { if (!settled) { settled = true; reject(err); if (mine()) this.close(); } };
-      const timer = setTimeout(() => fail(new Error('Timed out connecting. Is the TV page open?')), timeoutMs);
+      const fail = (err) => { if (!settled) { settled = true; err.stage = this.stage; reject(err); if (mine()) this.close(); } };
+      const LINK_HELP = 'Found the room, but your phone couldn\'t link up with the TV. Put your phone on the SAME Wi-Fi as the TV (turn off mobile data and any VPN), then tap Reconnect.';
+      const timer = setTimeout(() => fail(new Error(this.stage === 'server'
+        ? "Couldn't reach the game server. Check your internet connection and try again."
+        : LINK_HELP)), timeoutMs);
 
       const peer = new Peer(CONFIG.peerOptions);
       this.peer = peer;
@@ -49,8 +54,14 @@ export class ClientNet {
       });
       peer.on('open', () => {
         if (!mine()) return;
+        this.stage = 'link';
         const conn = peer.connect(CONFIG.peerPrefix + code, { reliable: true, serialization: 'json' });
         this.conn = conn;
+        // If the direct link definitely failed, say so right away instead of waiting for the timeout.
+        const pc = conn.peerConnection;
+        if (pc) pc.addEventListener('iceconnectionstatechange', () => {
+          if (mine() && !settled && pc.iceConnectionState === 'failed') fail(new Error(LINK_HELP));
+        });
         conn.on('open', () => {
           if (!mine()) return;
           this.input = makeInputChannel(conn);

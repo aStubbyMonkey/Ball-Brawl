@@ -116,8 +116,11 @@ $('join-btn').onclick = () => {
   for (const k of ['hat', 'eyes', 'outfit', 'skin']) store.set(k, state[k]);
 
   // All of these need the tap's "user gesture", so call them right here, before any await.
-  const perm = Tilt.requestPermission();
-  requestWakeLock();
+  let perm;
+  try { perm = Tilt.requestPermission(); } catch { perm = Promise.resolve(false); }
+  // Never let a stuck permission prompt block joining.
+  perm = Promise.race([perm, new Promise((r) => setTimeout(() => r(false), 8000))]);
+  try { requestWakeLock(); } catch {}
   const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (!isIOS && document.documentElement.requestFullscreen) {
     document.documentElement.requestFullscreen({ navigationUI: 'hide' })
@@ -140,7 +143,7 @@ async function connect(firstTime) {
       hat: state.hat, eyes: state.eyes, outfit: state.outfit, skin: state.skin,
     });
   } catch (err) {
-    showError(err.message);
+    showError(err.message || 'Could not connect.', true, err.stage);
     return;
   }
   history.replaceState(null, '', `?room=${state.room}`);
@@ -212,9 +215,11 @@ const camEl = $('ballcam'), camVideo = $('ballcam-video');
 function setCam(stream) {
   camStream = stream;
   camVideo.srcObject = stream;
-  if (stream) camVideo.play?.().catch(() => {});
+  // iPhones in Low Power Mode refuse to auto-play video: then a tap starts it.
+  if (stream) camVideo.play?.().then(() => camEl.classList.remove('tap'), () => camEl.classList.add('tap'));
   renderCam();
 }
+camEl.addEventListener('click', () => { camVideo.play?.().then(() => camEl.classList.remove('tap'), () => {}); });
 function renderCam() {
   const on = !!(camStream && camWanted);
   camEl.classList.toggle('hidden', !on);
@@ -276,8 +281,10 @@ function renderPhase(m) {
   }
 }
 
-function showError(text, canRetry = true) {
+function showError(text, canRetry = true, stage = null) {
   $('error-text').textContent = text;
+  $('error-help').classList.toggle('hidden', !stage);
+  $('error-detail').textContent = stage ? `step: ${stage} · ${isIOS() ? 'iPhone/iPad' : 'other'} · ${navigator.userAgent.match(/(Version|CriOS|FxiOS|Chrome)\/[\d.]+/)?.[0] || ''}` : '';
   $('retry-btn').classList.toggle('hidden', !canRetry);
   $('retry-btn').textContent = state.kicked ? 'Join again' : 'Reconnect';
   show('screen-error');
@@ -333,6 +340,7 @@ setInterval(() => {
 })();
 
 // ---------- helpers ----------
+function isIOS() { return /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
 function buzz(ms) { try { navigator.vibrate?.(ms); } catch {} }
 
 // Game feedback: a vibration pattern (Android) + a colored flash on screen (works everywhere,
