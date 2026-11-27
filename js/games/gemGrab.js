@@ -78,7 +78,7 @@ export default {
     };
     const gemMats = GEM_COLORS.map((c) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.35, roughness: 0.15, metalness: 0.2, flatShading: true }));
     const starMat = new THREE.MeshStandardMaterial({ color: '#ffd60a', emissive: '#ffb000', emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.4 });
-    const shadowMat = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.18, depthWrite: false });
+    const shadowMat = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.18, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
     const shadowGeo = new THREE.CircleGeometry(0.4, 20);
 
     function addGem(pos, { star = false, vel = null } = {}) {

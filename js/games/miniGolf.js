@@ -6,47 +6,56 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { rankGroups } from './helpers.js';
-import { feltTexture, flag, bumper, pusher, frame, orientedBox } from './course.js';
+import { feltTexture, flag, bumper, pusher, frame, orientedBox, overlay } from './course.js';
 
 const MAX_STROKES = 8;
 const TIME_LIMIT = 90;
 const CUP_R = 0.55;
 
 // Floors: [x1, z1, x2, z2, y=0]. Walls: [x1, z1, x2, z2]. Ramps: {from:[x,y,z], to:[x,y,z], w}.
+// `route` is the path a sensible player would take (used by the automatic hole tester).
 const HOLES = [
   {
     id: 'windmill', name: 'Windmill Hill', theme: 'meadow', par: 3,
-    tee: [0, 0, 7], cup: [0, 0, -7.5],
-    floors: [[-2.2, -9, 2.2, 8.5]],
-    walls: [[-2.2, -9, -2.2, 8.5], [2.2, -9, 2.2, 8.5], [-2.2, -9, 2.2, -9], [-2.2, 8.5, 2.2, 8.5],
-      [-2.2, -1, -0.7, -1], [0.7, -1, 2.2, -1]],
+    tee: [0, 0, 7], cup: [0, 0, -7],
+    floors: [[-2.6, -9, 2.6, 8.5]],
+    walls: [[-2.6, -9, -2.6, 8.5], [2.6, -9, 2.6, 8.5], [-2.6, -9, 2.6, -9], [-2.6, 8.5, 2.6, 8.5],
+      [-2.6, -1, -1.15, -1], [1.15, -1, 2.6, -1]],
     windmill: { z: -1 },
-    cam: { pos: [0, 21, 9.5], look: [0, 0, 0.3] },
+    route: [[0, -7]],
+    cam: { pos: [0, 19, 9], look: [0, 0, 0.3] },
   },
   {
     id: 'bumpers', name: 'Candy Corner', theme: 'candy', par: 3,
-    tee: [2, 0, 6.5], cup: [-2, 0, -7.5],
-    floors: [[-3.5, -1, 3.5, 8], [-3.5, -9, -0.5, -1]],
-    walls: [[-3.5, -9, -3.5, 8], [-3.5, -9, -0.5, -9], [-0.5, -9, -0.5, -1], [-0.5, -1, 3.5, -1], [3.5, -1, 3.5, 8], [-3.5, 8, 3.5, 8]],
-    bumpers: [[1.3, 2.4], [-1.6, 4.2], [-2, -4.5]],
-    pushers: [{ from: [-3.0, -3], to: [-1, -3], period: 2.6 }],
-    cam: { pos: [0, 21, 9.5], look: [0, 0, 0.3] },
+    tee: [2.5, 0, 6.5], cup: [-2, 0, -7],
+    floors: [[-4, -1, 4, 8], [-4, -9, 0, -1]],
+    walls: [[-4, -9, -4, 8], [-4, -9, 0, -9], [0, -9, 0, -1], [0, -1, 4, -1], [4, -1, 4, 8], [-4, 8, 4, 8]],
+    bumpers: [[1.6, 2.6], [-1.9, 4.6], [-0.9, -4.6]],
+    route: [[-2, 0.6], [-2, -7]],
+    cam: { pos: [0, 19, 9], look: [0, 0, 0.3] },
   },
   {
     id: 'ramp', name: 'Sky Steps', theme: 'skytower', par: 3,
-    tee: [0, 0, 7.5], cup: [0, 1.2, -7.5],
-    floors: [[-2, 3, 2, 9], [-3, -9.5, 3, -2.5, 1.2]],
-    ramps: [{ from: [0, 0, 3], to: [0, 1.2, -2.5], w: 4 }],
-    walls: [[-2, 3, -2, 9], [2, 3, 2, 9], [-2, 9, 2, 9],
-      [-3, -9.5, 3, -9.5, 1.2], [-3, -9.5, -3, -2.5, 1.2], [3, -9.5, 3, -2.5, 1.2], [-3, -2.5, -2, -2.5, 1.2], [2, -2.5, 3, -2.5, 1.2]],
+    tee: [0, 0, 7.5], cup: [0.6, 0.6, -7],
+    floors: [[-2.6, 3, 2.6, 9], [-3.6, -9.5, 3.6, -2, 0.6]],
+    ramps: [{ from: [0, 0, 3], to: [0, 0.6, -2], w: 5.2 }],
+    walls: [[-2.6, 3, -2.6, 9], [2.6, 3, 2.6, 9], [-2.6, 9, 2.6, 9],
+      [-3.6, -9.5, 3.6, -9.5, 0.6], [-3.6, -9.5, -3.6, -2, 0.6], [3.6, -9.5, 3.6, -2, 0.6], [-3.6, -2, -2.6, -2, 0.6], [2.6, -2, 3.6, -2, 0.6]],
     rampWalls: true,
-    pushers: [{ from: [-2.2, -5, 1.2], to: [2.2, -5, 1.2], period: 3.2 }],
-    cam: { pos: [0, 21, 9.5], look: [0, 0.5, 0.3] },
+    pushers: [{ from: [-3.0, -5, 0.6], to: [-1.1, -5, 0.6], period: 3.4 }],
+    route: [[0.6, -1], [0.6, -7]],
+    cam: { pos: [0, 19, 9], look: [0, 0.4, 0.3] },
   },
 ];
 
+// Rails: a softer bounce than the bumpers (they used to bounce MORE than you hit them).
+const RAIL = new CANNON.Material('rail');
+const _railWorlds = new WeakSet();
+
 export default {
   id: 'mini-golf',
+  HOLES, // for the hole tester
+  phoneCam: { up: 9, back: 6 },
   name: 'Mini Golf',
   emoji: '⛳',
   theme: 'meadow',
@@ -65,6 +74,11 @@ export default {
     const wallMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.4 });
     const wallMat2 = new THREE.MeshStandardMaterial({ color: '#ff8fab', roughness: 0.4 });
     const bouncy = ctx.engine.mat.bouncy;
+    if (!_railWorlds.has(ctx.engine.world)) {
+      _railWorlds.add(ctx.engine.world);
+      ctx.engine.world.addContactMaterial(new CANNON.ContactMaterial(ctx.engine.mat.ball, RAIL, { friction: 0, restitution: 0.7 }));
+    }
+    const postMat = new THREE.MeshStandardMaterial({ color: '#ffd60a', roughness: 0.4 });
     const I = new THREE.Quaternion();
 
     for (const [x1, z1, x2, z2, y = 0] of H.floors) {
@@ -74,32 +88,37 @@ export default {
     }
     let wi = 0;
     const wall = (x1, z1, x2, z2, y = 0) => {
-      const len = Math.hypot(x2 - x1, z2 - z1) + 0.3;
+      const len = Math.hypot(x2 - x1, z2 - z1);
       const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.atan2(z2 - z1, x2 - x1));
-      // Bouncy material gives that satisfying rebound off the rails.
-      orientedBox(ctx, [len, 0.6, 0.3], new THREE.Vector3((x1 + x2) / 2, y + 0.3, (z1 + z2) / 2), q, wi++ % 2 ? wallMat2 : wallMat, { material: bouncy });
+      orientedBox(ctx, [len, 0.6, 0.3], new THREE.Vector3((x1 + x2) / 2, y + 0.3, (z1 + z2) / 2), q, wi++ % 2 ? wallMat2 : wallMat, { material: RAIL });
+      // Little posts on the corners (so rails never overlap and flicker).
+      for (const [px, pz] of [[x1, z1], [x2, z2]]) {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.7, 12), postMat);
+        m.position.set(px, y + 0.35, pz); m.castShadow = true;
+        ctx.level.add(m);
+      }
     };
     for (const w of H.walls) wall(...w);
     for (const r of H.ramps || []) {
       const F = frame(r.from, r.to);
       const top = felt.clone(); top.map = felt.map.clone(); top.map.repeat.set(r.w / 4, F.L / 4); top.map.needsUpdate = true;
-      orientedBox(ctx, [r.w, 0.6, F.L + 0.1], F.at(F.L / 2, 0, -0.3), F.q, [edge, edge, top, edge, edge, edge], { cast: false });
-      if (H.rampWalls) for (const side of [-1, 1]) orientedBox(ctx, [0.3, 0.9, F.L + 0.3], F.at(F.L / 2, side * (r.w / 2 + 0.15), 0.15), F.q, wallMat, { material: bouncy });
+      orientedBox(ctx, [r.w, 0.6, F.L], F.at(F.L / 2, 0, -0.3), F.q, [edge, edge, top, edge, edge, edge], { cast: false });
+      if (H.rampWalls) for (const side of [-1, 1]) orientedBox(ctx, [0.3, 0.9, F.L], F.at(F.L / 2, side * (r.w / 2 + 0.15), 0.15), F.q, wallMat, { material: RAIL });
     }
 
     // ---- the cup + flag
     const cup = new THREE.Vector3(...H.cup);
-    const hole = new THREE.Mesh(new THREE.CircleGeometry(CUP_R, 32), new THREE.MeshBasicMaterial({ color: '#1b1b2a' }));
-    hole.rotation.x = -Math.PI / 2; hole.position.set(cup.x, cup.y + 0.015, cup.z);
-    const lip = new THREE.Mesh(new THREE.RingGeometry(CUP_R, CUP_R + 0.08, 32), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
-    lip.rotation.x = -Math.PI / 2; lip.position.set(cup.x, cup.y + 0.016, cup.z);
+    const hole = new THREE.Mesh(new THREE.CircleGeometry(CUP_R, 32), overlay(new THREE.MeshBasicMaterial({ color: '#1b1b2a' })));
+    hole.rotation.x = -Math.PI / 2; hole.position.set(cup.x, cup.y + 0.01, cup.z);
+    const lip = new THREE.Mesh(new THREE.RingGeometry(CUP_R, CUP_R + 0.08, 32), overlay(new THREE.MeshBasicMaterial({ color: '#ffffff' })));
+    lip.rotation.x = -Math.PI / 2; lip.position.set(cup.x, cup.y + 0.01, cup.z);
     ctx.level.add(hole); ctx.level.add(lip);
     const fl = flag(ctx, cup, '#ff4d6d');
     fl.group.position.x += CUP_R * 0.3;
 
     // ---- tee mat
     const tee = new THREE.Vector3(...H.tee);
-    const mat = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), new THREE.MeshStandardMaterial({ color: '#2d6a4f', roughness: 0.9 }));
+    const mat = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), overlay(new THREE.MeshStandardMaterial({ color: '#2d6a4f', roughness: 0.9 })));
     mat.rotation.x = -Math.PI / 2; mat.position.set(tee.x, tee.y + 0.01, tee.z);
     ctx.level.add(mat);
 
@@ -110,19 +129,18 @@ export default {
     if (H.windmill) {
       const z = H.windmill.z;
       const house = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(4.4, 2.4, 1.6), new THREE.MeshStandardMaterial({ color: '#ffe8a3', roughness: 0.7 }));
+      const body = new THREE.Mesh(new THREE.BoxGeometry(5.2, 2.4, 1.6), new THREE.MeshStandardMaterial({ color: '#ffe8a3', roughness: 0.7 }));
       body.position.set(0, 1.8, z - 0.3); body.castShadow = true;
       // Triangular prism roof (a 3-sided cylinder lying sideways, point up).
       const roofGeo = new THREE.CylinderGeometry(1.15, 1.15, 4.8, 3).rotateY(Math.PI / 2).rotateZ(Math.PI / 2);
       const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: '#ff4d6d', roughness: 0.6, flatShading: true }));
       roof.position.set(0, 3.55, z - 0.3); roof.castShadow = true;
-      const door = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.6), new THREE.MeshBasicMaterial({ color: '#2b2d42' }));
+      const door = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 0.6), new THREE.MeshBasicMaterial({ color: '#2b2d42' }));
       door.position.set(0, 0.9, z + 0.51);
       house.add(body, roof, door);
       ctx.level.add(house);
       // Physical sides of the house below the tunnel roof (the tunnel is the 1.4-wide gap in the walls).
-      orientedBox(ctx, [1.5, 0.6, 1.6], new THREE.Vector3(-1.45, 0.3, z - 0.3), I, new THREE.MeshStandardMaterial({ color: '#ffe8a3' }));
-      orientedBox(ctx, [1.5, 0.6, 1.6], new THREE.Vector3(1.45, 0.3, z - 0.3), I, new THREE.MeshStandardMaterial({ color: '#ffe8a3' }));
+      for (const sx of [-1, 1]) orientedBox(ctx, [1.45, 0.6, 1.6], new THREE.Vector3(sx * 1.875, 0.3, z - 0.3), I, new THREE.MeshStandardMaterial({ color: '#ffe8a3' }), { material: RAIL });
       // Spinning blades in front: they sweep down across the tunnel mouth.
       const g = new THREE.Group();
       const bm = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.4 });
@@ -130,15 +148,15 @@ export default {
       const bodyB = new CANNON.Body({ type: CANNON.Body.KINEMATIC, material: bouncy });
       for (let i = 0; i < 4; i++) {
         const a = (i / 4) * Math.PI * 2;
-        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.35, 2.1, 0.12), i % 2 ? bm : new THREE.MeshStandardMaterial({ color: '#4cc9f0', roughness: 0.4 }));
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.1, 0.12), i % 2 ? bm : new THREE.MeshStandardMaterial({ color: '#4cc9f0', roughness: 0.4 }));
         arm.position.set(Math.sin(a) * 1.05, Math.cos(a) * 1.05, 0); arm.rotation.z = -a; arm.castShadow = true;
         g.add(arm);
-        const sh = new CANNON.Box(new CANNON.Vec3(0.18, 1.05, 0.3));
+        const sh = new CANNON.Box(new CANNON.Vec3(0.15, 1.05, 0.3));
         bodyB.addShape(sh, new CANNON.Vec3(Math.sin(a) * 1.05, Math.cos(a) * 1.05, 0), new CANNON.Quaternion().setFromEuler(0, 0, -a));
       }
       g.add(new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 8), new THREE.MeshStandardMaterial({ color: '#ffd60a' })));
       bodyB.position.set(0, hubY, bz);
-      bodyB.angularVelocity.set(0, 0, -1.4);
+      bodyB.angularVelocity.set(0, 0, -0.9);
       ctx.level.add(g, bodyB);
       blades = { g, body: bodyB };
     }
@@ -178,7 +196,7 @@ export default {
     ctx.setTimer(timeLeft);
 
     const speedOf = (b) => Math.hypot(b.body.velocity.x, b.body.velocity.z);
-    const canPutt = (p) => running && p.ball.active && !p.ball.data.sunk && p.ball.data.still > 0.15 && p.ball.data.strokes < MAX_STROKES;
+    const canPutt = (p) => running && p.ball.active && !p.ball.data.sunk && p.ball.data.still > 0.2 && p.ball.data.strokes < MAX_STROKES;
 
     function putt(p) {
       const d = p.ball.data;
@@ -189,7 +207,7 @@ export default {
       d.last = [p.ball.position.x, p.ball.position.y + 0.1, p.ball.position.z];
       p.ball.body.velocity.set(Math.sin(d.aim) * sp, 0, Math.cos(d.aim) * sp);
       p.ball.poke(0.3 + power * 0.4);
-      d.strokes++; d.still = 0;
+      d.strokes++; d.still = 0; d.moving = 0;
       ctx.audio.bonk(0.3 + power * 0.5);
       ctx.feel(p, power > 0.7 ? 'bighit' : 'hit');
       ctx.fx.burst(p.ball.position, '#ffffff', { count: 5, speed: 2, up: 1, size: 0.06, life: 0.3 });
@@ -228,7 +246,7 @@ export default {
 
       update(dt) {
         if (blades) {
-          blades.body.angularVelocity.set(0, 0, running ? -1.4 : 0);
+          blades.body.angularVelocity.set(0, 0, running ? -0.9 : 0);
         }
         for (const pu of pushers) pu.step(running ? ctx.engine.time : 0);
         if (running) { elapsed += dt; timeLeft -= dt; ctx.setTimer(timeLeft); }
@@ -239,7 +257,11 @@ export default {
           const sp = speedOf(b);
           // Friction makes it stop for good instead of creeping forever.
           if (sp < 0.35 && b._groundedCache) { b.body.velocity.x *= 0.8; b.body.velocity.z *= 0.8; }
-          d.still = sp < 0.15 ? d.still + dt : 0;
+          d.still = sp < 0.4 ? d.still + dt : 0;
+          // Never stuck waiting: if the ball keeps creeping (nudged by a block, wobbling on a slope)
+          // for 5 seconds, it just stops so you can putt again.
+          d.moving = d.still > 0 ? 0 : (d.moving || 0) + dt;
+          if (d.moving > 5 && sp < 2.5) { b.body.velocity.set(0, 0, 0); d.still = 0.21; d.moving = 0; }
 
           // Aim with tilt (keeps the last aim when the phone is level).
           const inp = ctx.input(p);
@@ -271,7 +293,7 @@ export default {
 
         if (running) {
           const left = ctx.players.filter((p) => p.connected && !p.ball.data.sunk);
-          const stuck = left.every((p) => p.ball.data.strokes >= MAX_STROKES && p.ball.data.still > 1.2);
+          const stuck = left.every((p) => p.ball.data.strokes >= MAX_STROKES && (p.ball.data.still > 1.2 || p.ball.data.moving > 4));
           if (!left.length || stuck || timeLeft <= 0) finish();
         }
       },

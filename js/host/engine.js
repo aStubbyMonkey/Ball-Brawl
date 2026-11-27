@@ -13,6 +13,7 @@ export class Engine {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.autoUpdate = false; // updated once per frame for the main view (ball cams reuse it)
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(renderer.domElement);
     this.renderer = renderer;
@@ -261,6 +262,8 @@ export class Engine {
       this.alpha = this._acc / this.fixedDt;
       onFrame(realDt * this.timeScale, realDt);
       this._updateCamera(realDt);
+      try { this.beforeRender?.(realDt); } catch (e) { console.error('[beforeRender]', e); }
+      this.renderer.shadowMap.needsUpdate = true;
       this.renderer.render(this.scene, this.camera);
       requestAnimationFrame(tick);
     };

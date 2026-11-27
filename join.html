@@ -87,10 +87,13 @@
     <div class="play-top">
       <div class="me"><span id="me-dot" class="me-dot"></span><span id="me-name"></span></div>
       <div class="top-btns">
+        <button id="cam-btn" class="chip">📺 Cam on</button>
         <button id="recal-btn" class="chip">⟲ Recalibrate</button>
         <button id="leave-btn" class="chip">Leave</button>
       </div>
     </div>
+    <!-- Live close-up of your own ball, streamed from the TV -->
+    <div id="ballcam" class="ballcam hidden"><video id="ballcam-video" autoplay playsinline muted></video></div>
     <div class="status">
       <h2 id="status-title">You're in!</h2>
       <p id="status-text">Roll around while everyone joins.</p>

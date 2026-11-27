@@ -119,8 +119,11 @@ export function road(ctx, A, B, width, opts = {}) {
 /** Round piece that fills the gap where two road pieces meet at an angle, plus posts on the outer corner. */
 export function joint(ctx, P, width, inF, outF, opts = {}) {
   const thick = opts.thick ?? 0.8, R = width / 2;
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(R, R, thick, 40), [opts.side, opts.top, opts.side]);
-  mesh.position.set(P[0], P[1] - thick / 2, P[2]); mesh.receiveShadow = true;
+  // The joint overlaps the road ends. Draw it a hair lower and pushed back in depth so the
+  // road always wins where they overlap (no flickering "z-fighting").
+  const jt = jointTop(opts.top);
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(R, R, thick, 40), [opts.side, jt, opts.side]);
+  mesh.position.set(P[0], P[1] - thick / 2 - 0.012, P[2]); mesh.receiveShadow = true;
   const body = new CANNON.Body({ type: CANNON.Body.STATIC, material: opts.material || ctx.engine.mat.ground });
   body.addShape(new CANNON.Cylinder(R, R, thick, 20));
   body.position.set(P[0], P[1] - thick / 2, P[2]);
@@ -142,10 +145,23 @@ export function joint(ctx, P, width, inF, outF, opts = {}) {
   }
 }
 
+const _jointTops = new WeakMap();
+function jointTop(top) {
+  if (!_jointTops.has(top)) {
+    const m = top.clone();
+    m.polygonOffset = true; m.polygonOffsetFactor = 2; m.polygonOffsetUnits = 4;
+    _jointTops.set(top, m);
+  }
+  return _jointTops.get(top);
+}
+
+/** Pull a flat overlay material forward in depth so it never flickers against the surface below. */
+export function overlay(mat) { mat.polygonOffset = true; mat.polygonOffsetFactor = -2; mat.polygonOffsetUnits = -4; return mat; }
+
 /** Flat decal lying on a piece (pads, finish line). */
 export function decal(ctx, F, s, x, w, l, mat) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), mat);
-  m.position.copy(F.at(s, x, 0.03));
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), overlay(mat));
+  m.position.copy(F.at(s, x, 0.02));
   m.quaternion.copy(F.q).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
   ctx.level.add(m);
   return m;

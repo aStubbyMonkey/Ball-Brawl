@@ -12,6 +12,7 @@ import { HostUI, placeLabel } from './ui.js';
 import { Keyboard } from './keyboard.js';
 import { GAMES, LOBBY, gameById } from '../games/index.js';
 import { buildTheme } from '../games/env.js';
+import { PhoneCams } from './phonecams.js';
 
 const engine = new Engine(document.getElementById('stage'));
 const fx = new Fx(engine.scene);
@@ -142,6 +143,8 @@ const net = new HostNet({
       addToLobby(p);
     }
     client.send({ t: 'welcome', playerId: p.id, color: p.color });
+    const who = p;
+    setTimeout(() => { if (who.connected && who.client === client) cams.attach(who); }, 600);
     refreshLobby();
     sendPhaseAll(); // VIP may have changed
   },
@@ -150,6 +153,7 @@ const net = new HostNet({
     if (!p) return;
     p.connected = false;
     p.input = { x: 0, y: 0 };
+    cams.detach(p);
     ui.toast(`${p.name} disconnected`);
     if (current && current.ctx.players.includes(p)) {
       current.inst.onPlayerLeave?.(p);
@@ -164,6 +168,7 @@ const net = new HostNet({
     const p = players.get(client.id);
     if (!p) return;
     ui.toast(`${p.name} left`);
+    cams.detach(p);
     if (p.ball.active) fx.poof(p.ball.position);
     removePlayer(p);
   },
@@ -171,6 +176,7 @@ const net = new HostNet({
     const p = players.get(client.id);
     if (!p) return;
     if (msg.t === 'action') onAction(p, !!msg.up);
+    else if (msg.t === 'cam') { if (msg.on && !cams.cams.has(p)) cams.attach(p); cams.setWanted(p, !!msg.on); }
     else if (msg.t === 'vip' && p === vip() && phase === 'lobby') {
       if (msg.cmd === 'pick' && (msg.game === 'random' || gameById(msg.game))) { if (match.selected !== msg.game) match.map = 'random'; match.selected = msg.game; refreshLobby(); sendPhaseAll(); }
       if (msg.cmd === 'start') startRound();
@@ -256,7 +262,8 @@ function loadGame(def, participants, map = null) {
   const ctx = makeCtx(def, level, participants);
   ctx.map = map; // for games with several maps (Ball Race tracks, golf courses)
   current = { def, ctx, inst: {}, env: null };
-  current.env = buildTheme(ctx, def.maps?.find((m) => m.id === map)?.theme || def.theme || 'meadow');
+  const mapDef = def.maps?.find((m) => m.id === map);
+  current.env = buildTheme(ctx, mapDef?.theme || def.theme || 'meadow', mapDef?.env);
   current.inst = def.create(ctx) || {};
 }
 
@@ -601,6 +608,10 @@ function onFrame(dt, realDt) {
 
 // ---------------------------------------------------------------- boot
 enterLobby();
+// Ball cams: each phone gets a close-up video of its own ball.
+const cams = new PhoneCams(engine, () => net.peer);
+cams.enabled = true;
+engine.beforeRender = (realDt) => cams.render(realDt, current?.def.phoneCam);
 engine.start(onFixed, onFrame);
 
 // ?kb=2 adds keyboard players on load (handy for testing).
@@ -627,4 +638,4 @@ for (let i = 0; i < kbCount; i++) addKeyboardPlayer();
 window.addEventListener('pagehide', () => net.shutdown());
 
 // Expose for console tinkering: window.bb.players, window.bb.engine ...
-window.bb = { engine, players, match, fx, audio, finale, get current() { return current; }, get phase() { return phase; }, startRound, addKeyboardPlayer, kick: kickPlayer };
+window.bb = { engine, players, match, fx, audio, finale, cams, get current() { return current; }, get phase() { return phase; }, startRound, addKeyboardPlayer, kick: kickPlayer };

@@ -39,6 +39,14 @@ export class ClientNet {
         else if (!settled) fail(new Error('Connection problem: ' + (e.type || e.message)));
         else console.warn('[client] peer error', e);
       });
+      // The TV calls us with a live "ball cam" video of our own ball.
+      peer.on('call', (call) => {
+        if (!mine()) return;
+        try { call.answer(); } catch { return; }
+        call.on('stream', (s) => { if (mine()) this.h.onStream?.(s); });
+        call.on('close', () => { if (mine()) this.h.onStream?.(null); });
+        call.on('error', () => {});
+      });
       peer.on('open', () => {
         if (!mine()) return;
         const conn = peer.connect(CONFIG.peerPrefix + code, { reliable: true, serialization: 'json' });

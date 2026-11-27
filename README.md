@@ -26,6 +26,14 @@ button, used by Mini Golf: hold to charge, let go to putt), or open `index.html?
 | Gem Grab | Collect the most gems (more gems with more players). Gold stars are worth 5; big hits make people spill. |
 | Mini Golf | Everyone putts at once on one of 3 holes. Tilt to aim, hold to charge, let go. Fewest strokes wins. |
 
+**Ball cam:** every phone shows a live close-up of its own ball, rendered by the TV and sent as video.
+Tap **📺 Cam on/off** on the phone to toggle it. If the TV computer struggles, it renders the cams less often
+automatically (`js/host/phonecams.js`; change `W`, `H` or `PER_FRAME` there).
+
+**Fairness in Ball Race:** you respawn at the start of the piece you fell from, miss a jump twice and you're
+carried over, and a ball with no progress for 8 seconds is popped forward. Track rule: don't turn right at the
+top of a hill (the corner piece would stick up like a step).
+
 There's no boost button: speed is your weapon. Phones vibrate (Android) and flash (all phones) when you get hit,
 fall, collect, boost or win.
 
@@ -54,6 +62,7 @@ js/host/main.js            TV state machine: lobby → intro → playing → res
 js/host/engine.js          Three.js scene, cannon world, fixed-step loop, camera, level containers
 js/host/ball.js            player ball: physics, rolling mesh, outfit, label, trail, launch(), coyote time
 js/host/{fx,audio,ui,keyboard}.js   particles, synth SFX, DOM overlays, test keyboard input
+js/host/phonecams.js       ball cam: per-phone close-up video streamed from the TV
 js/games/index.js          ← the game list (add/remove games here)
 js/games/_template.js      ← copy this to make a new mini-game (documents the whole ctx API)
 js/games/helpers.js        platforms, tiles, boxes, spawn rings, ranking helpers

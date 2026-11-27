@@ -32,7 +32,7 @@ if (!state.clientId) {
 
 const tilt = new Tilt();
 const stick = new TouchStick($('stick'), $('stick-knob'));
-const net = new ClientNet({ onMessage, onClose });
+const net = new ClientNet({ onStream: (st) => setCam(st), onMessage, onClose });
 
 // ---------- screens ----------
 function show(id) {
@@ -89,7 +89,6 @@ function cycle(kind, dir) {
   const pop = $('pop-name');
   const row = document.querySelector(`.arrow-row[data-kind="${kind}"]`);
   pop.textContent = `${next.name}  ${list.indexOf(next) + 1}/${list.length}`;
-  pop.style.top = row ? row.style.top : '90%';
   pop.classList.remove('show'); void pop.offsetWidth; pop.classList.add('show');
   clearTimeout(popT); popT = setTimeout(() => pop.classList.remove('show'), 1300);
 }
@@ -205,10 +204,36 @@ actionBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 
 $('vip-start').onclick = () => net.send({ t: 'vip', cmd: 'start' });
 
+// ---------- ball cam (live video of your own ball from the TV)
+let camWanted = true;
+try { camWanted = localStorage.getItem('bb-cam') !== 'off'; } catch {}
+let camStream = null;
+const camEl = $('ballcam'), camVideo = $('ballcam-video');
+function setCam(stream) {
+  camStream = stream;
+  camVideo.srcObject = stream;
+  if (stream) camVideo.play?.().catch(() => {});
+  renderCam();
+}
+function renderCam() {
+  const on = !!(camStream && camWanted);
+  camEl.classList.toggle('hidden', !on);
+  document.body.classList.toggle('has-cam', on);
+  $('cam-btn').textContent = camWanted ? '📺 Cam on' : '📺 Cam off';
+}
+$('cam-btn').onclick = () => {
+  camWanted = !camWanted;
+  try { localStorage.setItem('bb-cam', camWanted ? 'on' : 'off'); } catch {}
+  net.send({ t: 'cam', on: camWanted });
+  renderCam();
+};
+renderCam();
+
 function onMessage(msg) {
   if (!msg || typeof msg !== 'object') return;
   switch (msg.t) {
     case 'welcome':
+      if (!camWanted) setTimeout(() => net.send({ t: 'cam', on: false }), 1000);
       state.color = msg.color || state.color;
       document.documentElement.style.setProperty('--me', state.color);
       $('me-name').textContent = state.name;

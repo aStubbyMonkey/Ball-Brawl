@@ -41,8 +41,8 @@ const STREAK_TEX = (() => {
 })();
 
 /** Builds the theme into ctx.level and returns { update(dt) }. */
-export function buildTheme(ctx, name) {
-  const th = THEMES[name] || THEMES.meadow;
+export function buildTheme(ctx, name, overrides = null) {
+  const th = { ...(THEMES[name] || THEMES.meadow), ...(overrides || {}) };
   ctx.engine.setSky(th.sky);
   const updaters = [];
   const L = ctx.level;
